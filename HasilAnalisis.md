@@ -42,7 +42,7 @@ Pada sesi bimbingan sebelumnya, dosen penguji/pembimbing menyarankan penggunaan 
 
 **Alasan Argumen:**
 1. **Justifikasi Komponen Sensor RGB TCS3200:**
-   Di dalam proposal tertera sensor warna TCS3200. Jika hanya ada 2 user, penggunaan sensor warna menjadi *overkill* karena robot bisa sekadar berhenti di persimpangan 1 atau persimpangan 2 menggunakan sensor IR. Dengan 3 User, sensor TCS3200 berfungsi krusial untuk mencocokkan kode warna stasiun:
+   Di dalam spreedsheet tertera sensor warna TCS3200. Jika hanya ada 2 user, penggunaan sensor warna menjadi *overkill* karena robot bisa sekadar berhenti di persimpangan 1 atau persimpangan 2 menggunakan sensor IR. Dengan 3 User, sensor TCS3200 berfungsi krusial untuk mencocokkan kode warna stasiun:
    * **Stasiun User 1:** Marka Warna Merah
    * **Stasiun User 2:** Marka Warna Hijau
    * **Stasiun User 3:** Marka Warna Biru
