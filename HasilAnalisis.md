@@ -37,7 +37,7 @@ Berdasarkan telaah mendalam terhadap hasil diskusi internal WhatsApp kelompok (a
 
 > **Prinsip Utama Arsitektur Tim:**
 > *"Sebenarnya user nggak harus 3, tergantung berapa jumlah titik pemberhentian di lintasan yang dibuat, oleh karena itu yang disimpan cuma graph yang merepresentasikan jalurnya."*
-> &mdash; **Konsensus Tim Kelompok 1**
+> **Konsensus Tim Kelompok 1**
 
 ### 1.1 Mengapa Paradigma Berbasis Graf Node Jauh Lebih Unggul & Fleksibel?
 1. **Tidak Bergantung pada Angka Kaku (2 atau 3 User):**
