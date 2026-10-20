@@ -1,0 +1,261 @@
+/* ==========================================================================
+   SMART ADAM DESIGN SYSTEM (Human-Centric & Modern Engineering Theme)
+   Autonomous Dustbin & Management IoT Control Center - Kelompok 1
+   Clean, Tactile, Grounded, High-Legibility SaaS & Operational Dashboard
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+
+:root {
+  /* Font Families: Human-crafted, high-legibility typography */
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* Transitions */
+  --transition-fast: 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Border Radii: Modern, soft geometric curves */
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+}
+
+/* ==========================================================================
+   DARK THEME (Charcoal / Deep Slate - Grounded, Professional, No Neon AI Slop)
+   ========================================================================== */
+[data-theme='dark'] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-card: #161b22;
+  --bg-card-hover: #1c2128;
+  --bg-glass: rgba(22, 27, 34, 0.88);
+
+  /* Crisp 1px Borders */
+  --border-subtle: #30363d;
+  --border-medium: #3d444d;
+  --border-bright: #388bfd;
+
+  /* High-Contrast Human Typography */
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --text-inverse: #0d1117;
+
+  /* Refined Engineering Accents */
+  --accent-blue: #2f81f7;
+  --accent-cyan: #39c5cf;
+  --accent-emerald: #2ea043;
+  --accent-amber: #d29922;
+  --accent-rose: #f85149;
+  --accent-purple: #a371f7;
+
+  /* Operational Status Colors */
+  --status-online: #2ea043;
+  --status-idle: #2f81f7;
+  --status-moving: #d29922;
+  --status-serving: #a371f7;
+  --status-obstacle: #f85149;
+  --status-error: #f85149;
+
+  /* Tactile Natural Elevation (No glowing neon halos) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================================
+   LIGHT THEME (Clean Architectural Studio Porcelain)
+   ========================================================================== */
+[data-theme='light'] {
+  --bg-primary: #f6f8fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #eaeef2;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f3f4f6;
+  --bg-glass: rgba(255, 255, 255, 0.92);
+
+  --border-subtle: #d0d7de;
+  --border-medium: #afb8c1;
+  --border-bright: #0969da;
+
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --text-muted: #8c959f;
+  --text-inverse: #ffffff;
+
+  /* Refined Engineering Accents */
+  --accent-blue: #0969da;
+  --accent-cyan: #0598ab;
+  --accent-emerald: #1a7f37;
+  --accent-amber: #9a6700;
+  --accent-rose: #cf222e;
+  --accent-purple: #8250df;
+
+  /* Operational Status Colors */
+  --status-online: #1a7f37;
+  --status-idle: #0969da;
+  --status-moving: #9a6700;
+  --status-serving: #8250df;
+  --status-obstacle: #cf222e;
+  --status-error: #cf222e;
+
+  /* Tactile Natural Elevation */
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
+  --shadow-md: 0 3px 6px rgba(31, 35, 40, 0.08);
+  --shadow-lg: 0 8px 20px rgba(31, 35, 40, 0.12);
+}
+
+/* ==========================================================================
+   BASE & RESET
+   ========================================================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100vh;
+  font-family: var(--font-main);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Scrollbar: Subtle, Minimal, Human */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ==========================================================================
+   SHARED UTILITY COMPONENTS (Grounded & Human-Centric)
+   ========================================================================== */
+
+/* Panels with subtle tactile border */
+.glass-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.glass-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.glass-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+/* Human Pill Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+}
+
+/* Primary Action Button (Tactile Engineering Feel) */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--accent-blue);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition: all var(--transition-fast);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+/* Secondary Button */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-medium);
+  color: var(--text-primary);
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
+}
+
+/* Functional Micro Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-out;
+}

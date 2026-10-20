@@ -1,0 +1,11 @@
+# SMART ADAM - Automated Dustbin And Management
+# Domain: https://smartadam.jinwoostream.lol
+# Production Deployment for STB / Cloudflare Tunnel
+
+User-agent: *
+Allow: /
+Disallow: /editor
+Disallow: /verify-otp
+Disallow: /forgot-password
+
+Sitemap: https://smartadam.jinwoostream.lol/sitemap.xml

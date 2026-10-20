@@ -1,0 +1,191 @@
+/* ==========================================================================
+   APP CONTAINER & FOOTER STYLES (Clean Human Engineering Theme)
+   ========================================================================== */
+
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+.app-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Footer: Clean, Grounded Attribution */
+.app-footer {
+  margin: 32px 24px 24px;
+  padding: 18px 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.footer-brand {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.footer-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.footer-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+}
+
+.footer-members-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  letter-spacing: 0.04em;
+}
+
+.footer-members {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .app-footer {
+    margin: 20px 12px 20px;
+    padding: 14px 16px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .footer-left, .footer-right {
+    width: 100%;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .footer-brand, .footer-sub, .footer-members {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   RESTRICTED ACCESS CARD (For Non-Admin Roles on Graph Editor)
+   ========================================================================== */
+.restricted-access-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 220px);
+  padding: 32px 16px;
+}
+
+.restricted-card {
+  max-width: 480px;
+  width: 100%;
+  padding: 32px 28px;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-medium);
+  background: var(--bg-secondary);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.restricted-icon-box {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: rgba(210, 153, 34, 0.12);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+  color: var(--accent-amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.restricted-card h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.restricted-card p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.restricted-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.restricted-actions .btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  font-size: 0.88rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+@media (max-width: 768px) {
+  .restricted-card {
+    padding: 24px 16px;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .restricted-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .restricted-actions .btn {
+    width: 100%;
+  }
+}

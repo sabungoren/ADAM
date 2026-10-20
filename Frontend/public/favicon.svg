@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="adamBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+
+    <!-- Main Cyan-Blue Tech Gradient -->
+    <linearGradient id="adamCyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+
+    <!-- Emerald Eco-IoT Gradient -->
+    <linearGradient id="adamGreenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Soft Glow Filter -->
+    <filter id="adamGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base Container -->
+  <rect x="6" y="6" width="108" height="108" rx="28" fill="url(#adamBgGrad)" stroke="#1e293b" stroke-width="2.5" />
+
+  <!-- Background Track Loop Line (Line Follower Path / Circuit Nexus) -->
+  <path d="M 30 96 C 45 96, 50 102, 60 102 C 70 102, 75 96, 90 96" fill="none" stroke="#334155" stroke-width="3" stroke-linecap="round" />
+  <circle cx="60" cy="102" r="3.5" fill="#38bdf8" />
+
+  <!-- Robot Wheel Bases (Mobile Chassis) -->
+  <rect x="34" y="85" width="10" height="6" rx="3" fill="#64748b" />
+  <rect x="76" y="85" width="10" height="6" rx="3" fill="#64748b" />
+  <rect x="40" y="87" width="40" height="4" rx="2" fill="#1e293b" />
+
+  <!-- Robot Dustbin Body (Sleek Tapered Futuristic Bin) -->
+  <path d="M 40 45 L 80 45 L 75 84 C 75 87, 72 89, 69 89 L 51 89 C 48 89, 45 87, 45 84 Z" fill="url(#adamCyanGrad)" />
+
+  <!-- Front Sensor Visor & Battery Level Bars (Ultrasonic + FC-51 representation) -->
+  <rect x="48" y="55" width="24" height="6" rx="3" fill="#090d16" />
+  <circle cx="53" cy="58" r="1.8" fill="#38bdf8" filter="url(#adamGlow)" />
+  <circle cx="67" cy="58" r="1.8" fill="#38bdf8" filter="url(#adamGlow)" />
+  <line x1="57" y1="58" x2="63" y2="58" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" />
+
+  <!-- Smart Bin Capacity Indicator Strip (Dynamic Level) -->
+  <rect x="49" y="68" width="22" height="13" rx="2.5" fill="#0f172a" />
+  <rect x="51" y="70" width="18" height="9" rx="1.5" fill="url(#adamGreenGrad)" filter="url(#adamGlow)" />
+
+  <!-- Cybernetic Hinged Lid (Auto-Opening Servo MG995 representation angled upwards) -->
+  <path d="M 37 42 L 77 31 L 79 36 L 39 46 Z" fill="url(#adamGreenGrad)" filter="url(#adamGlow)" />
+
+  <!-- WiFi / Cloud Telemetry Radio Waves at Top of Lid -->
+  <path d="M 64 22 A 10 10 0 0 1 78 26" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" />
+  <path d="M 69 16 A 17 17 0 0 1 85 22" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" opacity="0.7" />
+  <circle cx="61" cy="28" r="2.2" fill="#34d399" />
+</svg>

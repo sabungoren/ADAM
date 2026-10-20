@@ -1,0 +1,106 @@
+{
+  "nodes": [
+    {
+      "id": "A",
+      "label": "Home Base (Charging Dock)",
+      "x": 18,
+      "y": 25,
+      "isHome": true,
+      "colorHex": "#64748b"
+    },
+    {
+      "id": "B",
+      "label": "Stasiun 1 (Meja VIP Alpha)",
+      "x": 50,
+      "y": 25,
+      "isHome": false,
+      "colorHex": "#10b981"
+    },
+    {
+      "id": "C",
+      "label": "Stasiun 2 (Pojok Baca Beta)",
+      "x": 82,
+      "y": 25,
+      "isHome": false,
+      "colorHex": "#3b82f6"
+    },
+    {
+      "id": "D",
+      "label": "Stasiun 3 (Laboratorium Gamma)",
+      "x": 50,
+      "y": 70,
+      "isHome": false,
+      "colorHex": "#f59e0b"
+    },
+    {
+      "id": "E",
+      "label": "Stasiun 4 (Area Santai Delta)",
+      "x": 82,
+      "y": 70,
+      "isHome": false,
+      "colorHex": "#ec4899"
+    }
+  ],
+  "edges": [
+    {
+      "from": "A",
+      "to": "B",
+      "weight": 9,
+      "direction": 1
+    },
+    {
+      "from": "B",
+      "to": "A",
+      "weight": 9,
+      "direction": 3
+    },
+    {
+      "from": "B",
+      "to": "C",
+      "weight": 12,
+      "direction": 1
+    },
+    {
+      "from": "C",
+      "to": "B",
+      "weight": 12,
+      "direction": 3
+    },
+    {
+      "from": "B",
+      "to": "D",
+      "weight": 8,
+      "direction": 2
+    },
+    {
+      "from": "D",
+      "to": "B",
+      "weight": 8,
+      "direction": 0
+    },
+    {
+      "from": "C",
+      "to": "E",
+      "weight": 8,
+      "direction": 2
+    },
+    {
+      "from": "E",
+      "to": "C",
+      "weight": 8,
+      "direction": 0
+    },
+    {
+      "from": "D",
+      "to": "E",
+      "weight": 14,
+      "direction": 1
+    },
+    {
+      "from": "E",
+      "to": "D",
+      "weight": 14,
+      "direction": 3
+    }
+  ]
+}

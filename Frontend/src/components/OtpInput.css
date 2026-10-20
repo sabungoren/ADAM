@@ -1,0 +1,98 @@
+/* ==========================================================================
+   SMART ADAM - 6-Digit OTP Input Component Styles
+   Supports 1-box per digit, Auto-Advance, Backspace & Instant Paste
+   Visible Borders, Crisp Background, and Responsive Mobile Scaling
+   ========================================================================== */
+
+.otp-6-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 0;
+  box-sizing: border-box;
+}
+
+.otp-digit-box {
+  width: 52px;
+  height: 60px;
+  border-radius: var(--radius-md, 12px);
+  border: 1.5px solid var(--border-medium, #3d444d);
+  background: var(--bg-tertiary, #21262d);
+  color: var(--text-primary, #f0f6fc);
+  font-family: var(--font-mono, monospace);
+  font-size: 1.6rem;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.otp-digit-box:hover {
+  border-color: var(--accent-blue, #2f81f7);
+  background: var(--bg-card-hover, #1c2128);
+}
+
+.otp-digit-box:focus {
+  border-color: var(--accent-blue, #2f81f7);
+  background: var(--bg-secondary, #161b22);
+  box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.25), 0 0 16px rgba(47, 129, 247, 0.2);
+  transform: translateY(-2px);
+}
+
+.otp-digit-box.filled {
+  border-color: var(--accent-blue, #2f81f7);
+  background: rgba(47, 129, 247, 0.12);
+  color: #58a6ff;
+  box-shadow: 0 0 0 1px var(--accent-blue, #2f81f7);
+}
+
+.otp-digit-box:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   MOBILE RESPONSIVENESS
+   Ensures all 6 boxes fit cleanly & prominently across narrow smartphone screens
+   ========================================================================== */
+@media (max-width: 768px) {
+  .otp-6-container {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 0;
+  }
+
+  .otp-digit-box {
+    flex: 1 1 0;
+    max-width: 48px;
+    min-width: 36px;
+    height: 54px;
+    font-size: 1.4rem;
+    border-radius: var(--radius-sm, 8px);
+    border-width: 1.5px;
+  }
+}
+
+@media (max-width: 380px) {
+  .otp-6-container {
+    gap: 5px;
+  }
+
+  .otp-digit-box {
+    max-width: 40px;
+    min-width: 30px;
+    height: 48px;
+    font-size: 1.2rem;
+  }
+}
+
