@@ -21,13 +21,13 @@
   - ESP32 Development Board
   - Breadboard & Kabel Jumper (Male-to-Male, Male-to-Female)
   - Sensor Line Follower IR (3–5 Channel)
-  - Sensor Ultrasonik HC-SR04
-  - Sensor IR Obstacle FC-51
+  - Sensor Ultrasonik HC-SR04 (Buka tutup otomatis & pengukur volume sampah internal)
+  - Sensor IR Obstacle FC-51 (Pengaman tabrakan depan)
   - Motor DC Gearbox + Roda (4 set) + Driver Motor DC L298N
   - Sasis Robot 4 Roda
-  - Servo Motor SG90 / MG995
+  - Servo Motor SG90 / MG995 (Mekanisme buka tutup bak)
   - Baterai Li-ion 18650 (2-3 Slot) + Holder Baterai
-  - Sensor Warna RGB TCS3200
+  - Sensor Warna RGB TCS3200 (Pendeteksi marka simpul node)
 
 ---
 
@@ -37,7 +37,7 @@ Berdasarkan telaah mendalam terhadap hasil diskusi internal WhatsApp kelompok (a
 
 > **Prinsip Utama Arsitektur Tim:**
 > *"Sebenarnya user nggak harus 3, tergantung berapa jumlah titik pemberhentian di lintasan yang dibuat, oleh karena itu yang disimpan cuma graph yang merepresentasikan jalurnya."*
- **Konsensus Tim Kelompok 1**
+> &mdash; **Konsensus Tim Kelompok 1**
 
 ### 1.1 Mengapa Paradigma Berbasis Graf Node Jauh Lebih Unggul & Fleksibel?
 1. **Tidak Bergantung pada Angka Kaku (2 atau 3 User):**
@@ -52,7 +52,7 @@ Berdasarkan telaah mendalam terhadap hasil diskusi internal WhatsApp kelompok (a
 
 ## 2. Bedah Teknis Hasil Diskusi WhatsApp Tim
 
-Berdasarkan tangkapan layar diskusi WhatsApp (`SS_DiskusiWhatsapp_1.png` s.d. `SS_DiskusiWhatsapp_5.png`), terdapat beberapa poin teknis kunci yang telah disepakati:
+Berdasarkan tangkapan layar diskusi WhatsApp tim, terdapat beberapa poin teknis kunci yang telah disepakati:
 
 ### 2.1 Desain Lintasan dan Kemampuan Belok Motor DC (90° vs 45°)
 * **Pertanyaan Diskusi:** *"Lek belok 90° bisa gak bang untuk sensornya? Kalau dibuat 45° atau serong gitu?"*
@@ -63,7 +63,7 @@ Berdasarkan tangkapan layar diskusi WhatsApp (`SS_DiskusiWhatsapp_1.png` s.d. `S
   * Pemilihan sudut 90° sejajar 4 arah mata angin (**Utara, Timur, Selatan, Barat**) sangat ideal karena selaras dengan pembatasan maksimal 4 edge per node pada dokumen `spec.md` (2-bit direction: `00`, `01`, `10`, `11`).
 
 ### 2.2 Fungsi Sebenarnya dari Sensor Warna TCS3200 (Pragmatic Node Marker)
-* **Klarifikasi Kritis dari Ramzi (Pukul 10.37):**
+* **Klarifikasi Kritis dari Ramzi:**
   > *"Nggak juga sih, edge cuma jalan, patokannya di node, pake warna, tapi nggak spesifik warnanya, bisa terserah soalnya cuma dijadiin tanda kalo itu node."*
 * **Evaluasi & Argumen Rekayasa:**
   * **Risiko Kalibrasi Multi-Warna di Kondisi Nyata:** Jika sensor TCS3200 dipaksa membedakan banyak warna spesifik (User 1 = Hijau, User 2 = Biru, User 3 = Kuning) di bawah pencahayaan ruangan kelas yang tidak menentu (lampu neon/pantulan lantai), potensi kegagalan pembacaan frekuensi RGB sangat tinggi saat demo.
@@ -81,101 +81,68 @@ Berdasarkan tangkapan layar diskusi WhatsApp (`SS_DiskusiWhatsapp_1.png` s.d. `S
 
 ---
 
-## 3. Arsitektur Terpadu Sistem ADAM Berbasis Graf
+## 3. Telaah Kritis Revisi Arsitektur: Frontend-Only (Serverless) vs Full-Stack Laravel
 
-```
-+-----------------------------------------------------------------------------------------+
-|                           ARSITEKTUR DINAMIS BERBASIS GRAF NODE                         |
-+-----------------------------------------------------------------------------------------+
-|  [ FRONTEND: WEB DASHBOARD & GRAPH VIEWER ]                                             |
-|  - Graph Editor / Visualizer (Peta lintasan node A, B, C, ...)                          |
-|  - Dynamic Station Call Generator (Membuat tombol panggilan sesuai node di graf)        |
-|  - 3 Tombol Operasional: [ Panggil Node ]  [ Pulang ke Base ]  [ Cek Volume Sampah ]   |
-+-----------------------------------------------------------------------------------------+
-                                      │   ▲
-                                      │   │  JSON Payload Ringkas (< 50 Byte)
-                                      ▼   │
-+-----------------------------------------------------------------------------------------+
-|  [ BACKEND: LIGHTWEIGHT CLOUD DATABASE / MQTT BROKER ]                                  |
-|  - Menyimpan Topologi Graf: Node (V) & Edge (E) berbobot                               |
-|  - Antrean Panggilan FIFO: ["B", "C"]                                                   |
-|  - Status Telemetri Real-Time: Posisi Robot, Level Sampah (%), Baterai (%), Status       |
-+-----------------------------------------------------------------------------------------+
-                                      │   ▲
-                                      │   │  Wi-Fi Socket (MQTT / HTTP)
-                                      ▼   │
-+-----------------------------------------------------------------------------------------+
-|  [ EMBEDDED CONTROLLER: ROBOT ADAM (ESP32) ]                                            |
-|  - Core 0 (FreeRTOS): Koneksi Jaringan MQTT + Algoritma Rute Terpendek Dijkstra (RAM)   |
-|  - Core 1 (FreeRTOS): Task Executor Loop 100 Hz (PID Line Follower Motor DC L298N)      |
-|  - Deteksi Node: Sensor TCS3200 membaca marka pita warna di persimpangan lintasan       |
-|  - Mekanisme Pengaman: Sensor IR Obstacle FC-51 (Rem mendadak jika ada halangan fisik)  |
-|  - Mekanisme Sampah: HC-SR04 deteksi tangan (Servo buka) & HC-SR04 internal ukur volume |
-+-----------------------------------------------------------------------------------------+
-```
+Rekan tim menyampaikan usulan penting terkait arsitektur perangkat lunak:
+> *"Jika pakai desain ku spec.md yang ini tadi, tidak perlu server backend sih, server frontend saja udah cukup sih, karena hanya menyimpan data graph di RAM nya cukup."*
+
+### 3.1 Mengapa Usulan Ini Sangat Tepat? (Tinjauan Teknis IoT)
+1. **Prinsip *Edge Computing*:**
+   Robot ADAM bukanlah perangkat pasif (*dumb client*). Dengan menggunakan ESP32 dual-core yang menjalankan FreeRTOS, matriks graf biner dan algoritma Dijkstra dihitung **100% secara lokal di dalam mikrokontroler**. Server cloud/backend tidak perlu melakukan pemrosesan matematika rute.
+2. **Supabase Berfungsi Sebagai *Backend-as-a-Service (BaaS)*:**
+   Database PostgreSQL Supabase sudah menyediakan REST API otomatis dan *Realtime WebSockets* bawaan. Pustaka `@supabase/supabase-js` memungkinkan antarmuka React di browser langsung membaca status robot, mendengarkan perubahan data secara real-time, dan mengirimkan antrean pemanggilan tanpa memerlukan kontroler/routing Laravel perantara.
+3. **Memangkas Titik Kegagalan Saat Demo H-1:**
+   Meniadakan backend Laravel berarti tim tidak perlu menginstal PHP, Composer, mengonfigurasi CORS, atau menjalankan 2 terminal server sekaligus (`npm run dev` pada port 5193 dan `php artisan serve` pada port 5194) saat presentasi di depan dosen.
+
+### 3.2 Matriks Komparasi Pilihan Arsitektur
+
+| Aspek Penilaian | Opsi A: Serverless / Frontend-Centric (Saran Rekan Tim) | Opsi B: Full-Stack (React + Laravel + Supabase) |
+| :--- | :--- | :--- |
+| **Susunan Teknologi** | **React (Port 5193) &rarr; Supabase DB / MQTT &rarr; ESP32** | **React (5193) &rarr; Laravel (5194) &rarr; Supabase &rarr; ESP32** |
+| **Kecepatan Selesai** | **Sangat Cepat (Tuntas dalam hitungan jam)** | Butuh waktu tambahan untuk setup API Laravel |
+| **Kebutuhan Server Lokal** | Cukup 1 server: `npm run dev` di Port 5193 | 2 server aktif: Port 5193 & Port 5194 |
+| **Risiko Masalah Teknis** | **Sangat Rendah** (Koneksi langsung via SDK Supabase) | Rentan kendala CORS, timeout API, atau koneksi DB ganda |
+| **Kompleksitas Kode** | Ringkas, modular, dan mudah di-debug bersama | Kompleks dengan banyak lapisan controller dan model |
+| **Nilai Akademis UAS** | Sangat tinggi dengan menonjolkan konsep *Edge IoT Computing* | Baik untuk pembagian tugas tradisional jika diwajibkan dosen |
+
+**Rekomendasi Keputusan:**
+* **Prioritas Utama (Paling Efisien & Direkomendasikan):** Mengadopsi **Opsi A (React + Supabase)** untuk menjamin sistem langsung terhubung dan siap didemokan sesuai target dosen.
+* **Opsi Cadangan:** Jika dosen mewajibkan adanya framework backend Laravel, Laravel cukup dibuatkan 1 *controller* sederhana khusus pencatatan riwayat (*logging history*) tanpa membebani jalur kendali utama robot.
 
 ---
 
-## 4. Representasi Graf & Skema Data Super Ringan (Ultra-Lightweight)
+## 4. Konfigurasi Lingkungan dan Detail Database
 
-### 4.1 Model Graf Lintasan ($N$ Node, Fleksibel)
-Lintasan direpresentasikan sebagai graf tak berarah berbobot $G = (V, E)$:
-* **Node A (Home Base):** Titik awal parkir dan standby robot.
-* **Node B, C, D, ...:** Titik pemberhentian meja kerja / stasiun pemanggil.
-* Setiap node terhubung dengan garis hitam (*edge*) dengan kapasitas maksimal 4 percabangan arah mata angin (Utara, Timur, Selatan, Barat).
-
-```text
-    [Node A] (Home Base)
-       │
-       │ (Jarak = 8)
-       ▼
-    [Node B] (Stasiun 1) <──(Jarak = 14)──> [Node C] (Stasiun 2)
-       │                                       │
-       │ (Jarak = 7)                           │ (Jarak = 11)
-       ▼                                       ▼
-    [Node E] (Persimpangan) <─(Jarak = 12)─> [Node F] (Stasiun 3)
-```
-
-### 4.2 Enkoding Matriks 1D Byte Array di RAM ESP32
-Mengadopsi efisiensi dari `spec.md`, relasi antar-node dikompresi dalam matriks biner 1 byte per relasi edge:
-* **Bit 0 - 5 (6 bit):** Bobot jarak / waktu tempuh (nilai 1 sampai 63).
-* **Bit 6 - 7 (2 bit):** Arah mata angin (`00` = Utara, `01` = Timur, `10` = Selatan, `11` = Barat).
-
-### 4.3 Struktur Data Minimalis di Database Cloud
-Hanya ada 3 data sederhana yang disimpan di server/database:
-
-```json
-{
-  "graph_config": {
-    "nodes": ["A", "B", "C", "D"],
-    "home_node": "A"
-  },
-  "robot_telemetry": {
-    "current_node": "A",
-    "status": "IDLE",
-    "trash_percent": 35,
-    "battery_percent": 88
-  },
-  "call_queue": ["B", "C"]
-}
-```
-
-*Keunggulan:* Ukuran transaksi pertukaran data tidak lebih dari 50 byte, sangat cepat dan tidak membebani ESP32 maupun kuota hotspot saat demonstrasi.
+* **Frontend:** React (Vite SPA) &mdash; **Port: 5193**
+* **Backend (Jika diaktifkan):** Laravel API &mdash; **Port: 5194**
+* **Database Cloud:** PostgreSQL via Supabase
+  * **Koneksi:** `postgresql://postgres:[PASSWORD]@db.oslhwkhztahfghefwkjk.supabase.co:5432/postgres`
+  * **Host:** `db.oslhwkhztahfghefwkjk.supabase.co`
+  * **Port DB:** `5432`
+  * **Database Name:** `postgres`
+  * **User:** `postgres`
 
 ---
 
-## 5. Analisis Frontend: Dashboard & Dynamic Station Generator
+## 5. Spesifikasi Lengkap Halaman Website & Fitur-Fiturnya
 
-Sesuai arahan Thoriq (*"monggo dicicil dashboard sama graph editor e"*), antarmuka web dibangun dengan arsitektur modular yang adaptif terhadap jumlah titik henti di lintasan.
+Website dirancang dengan 3 halaman utama yang modern, responsif, dan siap memukau dosen saat demonstrasi:
 
-### 5.1 Tata Letak Dashboard Interaktif
+```
++-----------------------------------------------------------------------------------------+
+|  [LOGO] SMART ADAM     [1. Dashboard Kontrol]   [2. Graph Editor]   [3. Riwayat & Log]  |
++-----------------------------------------------------------------------------------------+
+```
+
+### 5.1 Halaman 1 &mdash; Dashboard Kontrol Utama (`/` atau `/dashboard`)
+Pusat kendali operasional pemanggilan dan pemantauan kondisi fisik robot secara real-time.
 
 ```text
 +-----------------------------------------------------------------------------------------+
-|                             SMART ADAM - IOT CONTROL PANEL                              |
+|                              SMART ADAM - IOT CONTROL PANEL                             |
 |  Koneksi: [ONLINE]  |  Posisi: [Node A (Home)]  |  Baterai: [88%]  |  Level Tong: [35%] |
 +-----------------------------------------------------------------------------------------+
-|  PETA GRAF LINTASAN AKTIF (Read-Only Viewer):                                           |
+|  PETA GRAF LINTASAN AKTIF (Interactive 2D Viewer):                                      |
 |       (A: Home) ─────── (B: Meja 1) ─────── (C: Meja 2)                                 |
 |                            │                   │                                        |
 |                         (D: Meja 3) ──────── (E: Drop Point)                            |
@@ -191,7 +158,7 @@ Sesuai arahan Thoriq (*"monggo dicicil dashboard sama graph editor e"*), antarmu
 |                                                                                         |
 |    +-------------------------------------------------------------------------+          |
 |    |  [TOMBOL 3: DETEKSI VOLUME SAMPAH REAL-TIME]                            |          |
-|    |  (Trigger sensor ultrasonik internal & update persentase kapasitas)     |          |
+|    |  (Trigger sensor ultrasonik internal & update persentase kapasitas tong)|          |
 |    +-------------------------------------------------------------------------+          |
 |                                                                                         |
 +-----------------------------------------------------------------------------------------+
@@ -202,38 +169,54 @@ Sesuai arahan Thoriq (*"monggo dicicil dashboard sama graph editor e"*), antarmu
 +-----------------------------------------------------------------------------------------+
 ```
 
-### 5.2 Rincian Fitur Utama Frontend
-1. **Dynamic Station Generator:**
-   Frontend membaca `graph_config.nodes` dari database. Jika lintasan memiliki 3 titik henti di luar Home (misal B, C, D), maka otomatis dibuat 3 tombol stasiun. Jika hanya ada 2 stasiun (B, C), tombol menyesuaikan diri secara otomatis tanpa perlu mengubah struktur HTML/CSS.
-2. **3 Tombol Operasional Utama:**
-   * **Tombol 1 &mdash; Panggil ADAM:** Mengirimkan ID node stasiun terpilih ke antrean `call_queue`.
-   * **Tombol 2 &mdash; Selesai & Pulang ke Home:** Menutup tempat sampah dan menginstruksikan robot kembali ke Node Home (`Node A`).
-   * **Tombol 3 &mdash; Deteksi Volume Sampah Real-Time:** Meminta ESP32 membaca sensor HC-SR04 internal dan memperbarui bar progres kapasitas sampah di layar.
+#### Rincian Fitur & Tombol Dashboard:
+1. **Top Telemetry Bar:** Status koneksi WebSocket, status state machine robot (`IDLE`, `MOVING`, `SERVING`, `OBSTACLE_STOP`), persentase baterai, dan persentase kapasitas sampah.
+2. **Visualizer Peta Graf 2D:** Denah simpul lintasan interaktif. Posisi robot ditandai dengan avatar bergerak secara real-time. Node dapat diklik langsung untuk memanggil robot.
+3. **Dynamic Station Selector:** Tombol stasiun pemanggil terbuat secara otomatis dari daftar node graf yang aktif.
+4. **Tombol 1 &mdash; Panggil ADAM:** Mengirimkan perintah pemanggilan stasiun ke antrean.
+5. **Tombol 2 &mdash; Selesai & Pulang ke Home:** Menutup tempat sampah otomatis dan memulangkan robot ke stasiun parkir awal (Node A).
+6. **Tombol 3 &mdash; Deteksi Volume Sampah Real-Time:** 
+   * **Definisi Fungsi:** Fitur ini **secara spesifik mengukur volume kepenuhan sampah di dalam tong sampah**.
+   * Ketika tombol ini ditekan, sistem mengirim sinyal pemicu ke sensor ultrasonik HC-SR04 yang terpasang di bawah tutup tong bagian dalam.
+   * Sensor mengukur jarak sisa ke tumpukan sampah, lalu mengonversi nilai tersebut menjadi persentase kapasitas terisi (0% s.d. 100%) dan langsung memperbarui bilah progres kapasitas di dashboard:
+     * **0% &ndash; 50% (Hijau):** Kapasitas aman / masih lapang.
+     * **51% &ndash; 80% (Kuning):** Kapasitas mendekati penuh.
+     * **> 80% (Merah):** Peringatan sampah penuh (tombol panggil dikunci otomatis agar sampah tidak meluap).
+
+### 5.2 Halaman 2 &mdash; Peta & Graph Editor (`/graph-editor`)
+Halaman khusus konfigurasi lintasan untuk memenuhi kebutuhan penyesuaian rute tanpa perlu koding ulang.
+* Menambah atau menghapus simpul Node (Node A, B, C, D...).
+* Menghubungkan antar-node dengan garis (*Edge*), mengatur bobot jarak (weight 1-63), dan memilih arah mata angin (Utara, Timur, Selatan, Barat).
+* Tombol **"Sync to Robot"** untuk menyimpan graf ke Supabase dan memicu unduhan rute ke ESP32.
+* Fitur template rute cepat (*Garis Lurus*, *Bercabang T*, atau *Grid*).
+
+### 5.3 Halaman 3 &mdash; Riwayat & Log Aktivitas (`/logs`)
+Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di hadapan dosen:
+* **Tabel Riwayat Panggilan:** Log stasiun pemanggil, waktu request, durasi pelayanan, dan status eksekusi.
+* **Grafik Tren Volume Sampah:** Grafik garis riwayat akumulasi pembuangan sampah berdasarkan waktu.
+* **Log Keamanan (Safety Logs):** Rekaman insiden ketika sensor FC-51 mendeteksi objek atau rem mendadak di lintasan.
 
 ---
 
-## 6. Integrasi Hardware, Sensor, dan Alur Logika Robot
+## 6. Alur Komunikasi Sistem Terpadu (Ultra-Lightweight)
 
-### 6.1 Alur Logika Eksekusi di Mikrokontroler (ESP32)
-
-1. **Standby di Home Node:** Robot berada di Node A dalam status `IDLE`.
-2. **Penerimaan Panggilan:** ESP32 menerima target node dari antrean (contoh: Node C).
-3. **Pencarian Rute Dijkstra:** `Task Route Finder` di Core 0 mengeksekusi algoritma Dijkstra terhadap matriks graf di RAM untuk menghasilkan daftar urutan node terpendek (misal: `A -> B -> C`).
-4. **Navigasi Line Follower:** `Task Executor` di Core 1 mengendalikan PWM Motor DC via driver L298N agar robot mengikuti garis hitam.
-5. **Penanganan Halangan (Sensor FC-51):** Jika sensor inframerah FC-51 mendeteksi objek di depan (< 10 cm), robot seketika mematikan motor (*brake stop*) tanpa menunggu instruksi cloud sampai halangan berpindah.
-6. **Deteksi Kedatangan di Node (Sensor TCS3200):**
-   * Saat melewati persimpangan, sensor TCS3200 mendeteksi marka pita warna.
-   * Event `NODE_ARRIVED` dipicu; robot mencocokkan node yang dicapai dengan urutan rute.
-   * Jika simpul tersebut merupakan perantara, robot mengeksekusi manuver belok sesuai *heading*. Jika simpul tersebut adalah Node tujuan akhir (Node C), robot berhenti penuh.
-7. **Layanan Pembuangan Sampah:**
-   * Sensor HC-SR04 eksternal mendeteksi tangan pembuang (< 15 cm) &rarr; Servo membuka tutup 90°.
-   * Dwell timer (15 detik) berjalan dengan fitur reset otomatis jika ada interaksi lanjutan.
-   * Setelah selesai, servo kembali ke posisi 0° (tertutup).
-8. **Pengukuran Kapasitas Sampah:**
-   * Sensor HC-SR04 internal membaca sisa ruang di dalam tong, mengonversi nilai menjadi persentase terisi (0% - 100%), dan mengirimkan update ke database.
-9. **Kembali atau Lanjut Antrean:**
-   * Jika antrean berikutnya ada, robot menghitung rute dari Node saat ini ke Node berikutnya.
-   * Jika antrean kosong, robot menjalankan rute kembali ke Node Home (Node A).
+```text
+[ Browser Web: React SPA ] (Port 5193)
+        │
+        ├── (1) Baca/Tulis Data Graf ──> [ Supabase DB (PostgreSQL) ]
+        │                                       │
+        ├── (2) Publish Panggilan ('B')         │ Realtime Channel Sync
+        ▼                                       ▼
+[ ESP32 Controller (Robot ADAM) ] <─────────────┘
+   ├── Menerima target node ('B')
+   ├── Ambil graf dari RAM
+   ├── Hitung Dijkstra secara lokal (Core 0 FreeRTOS)
+   ├── Task Executor Loop 100 Hz telusuri garis via L298N (Core 1)
+   ├── Sensor TCS3200 baca marka node di persimpangan
+   ├── Sensor FC-51 rem seketika jika ada halangan fisik
+   ├── HC-SR04 luar buka tutup servo saat tangan mendekat
+   └── HC-SR04 dalam ukur persentase volume sampah & kirim telemetri balik
+```
 
 ---
 
@@ -246,13 +229,13 @@ Sesuai arahan Thoriq (*"monggo dicicil dashboard sama graph editor e"*), antarmu
 | | ENB (PWM Motor Kanan) | `GPIO 32` | Output (LEDC) | Kontrol kecepatan roda kanan |
 | | IN3, IN4 (Arah Kanan) | `GPIO 25`, `GPIO 33` | Output Digital | Logika arah maju/mundur roda kanan |
 | **Sensor Line Follower** | Sensor Kiri (IR 1) | `GPIO 34` | Input Digital | Deteksi garis sisi kiri |
-| | Sensor Tengah (IR 2) | `GPIO 35` | Input Digital | Pemandu garis tengah (track keeper) |
+| | Sensor Tengah (IR 2) | `GPIO 35` | Input Digital | Pemandu garis tengah (*track keeper*) |
 | | Sensor Kanan (IR 3) | `GPIO 39` (VN) | Input Digital | Deteksi garis sisi kanan |
 | **Sensor Warna TCS3200** | S0, S1 (Frekuensi) | `GPIO 19`, `GPIO 18` | Output Digital | Pengatur skala frekuensi sensor |
 | | S2, S3 (Filter) | `GPIO 5`, `GPIO 17` | Output Digital | Seleksi filter warna pembacaan |
 | | OUT (Output Pulsa) | `GPIO 16` | Input (Interrupt) | Deteksi marka warna persimpangan node |
 | **Sensor Ultrasonik HC-SR04** | Trig Pin | `GPIO 4` | Output Digital | Memicu pulsa 10 µs ultrasonik |
-| | Echo Pin | `GPIO 15` | Input (*Divider*) | Penerima pantulan sinyal (via resistor 1k & 2k) |
+| | Echo Pin | `GPIO 15` | Input (*Divider*) | Pembacaan jarak sampah / tangan (via divider 1k & 2k) |
 | **Sensor Halangan FC-51** | OUT Digital | `GPIO 13` | Input Digital | Rem darurat anti-tabrak (`LOW` = Stop) |
 | **Servo Motor** | Signal PWM | `GPIO 23` | Output (LEDC) | Kendali buka (90°) dan tutup (0°) bak |
 | **Buzzer** | Positif Buzzer | `GPIO 2` | Output Digital | Indikator suara kedatangan / peringatan |
@@ -263,24 +246,21 @@ Sesuai arahan Thoriq (*"monggo dicicil dashboard sama graph editor e"*), antarmu
 
 ## 8. Matriks Pembagian Tugas Anggota Kelompok 1 (8 Mahasiswa)
 
-Sesuai arahan dosen agar seluruh 8 anggota berkontribusi aktif dalam pengerjaan 1-2 hari ini:
-
 | No | Nama Mahasiswa | Peran Proyek | Fokus Tanggung Jawab Nyata |
 | :---: | :--- | :--- | :--- |
-| 1 | **Adam Rahmatulloh** | Project Leader & Hardware Lead | Integrasi sasis mekanik 4 roda, manajemen perkabelan breadboard, dan sistem distribusi daya baterai. |
-| 2 | **M Ilham Jazuli** | Frontend Developer | Perancangan antarmuka dashboard, visualisasi graf, dynamic station call generator, dan 3 tombol kontrol. |
-| 3 | **M Thoriq Dhiyaul Haq** | Backend & IoT Architect | Setup broker/database ultra-ringan, sinkronisasi antrean pemanggilan FIFO, dan integrasi API dashboard. |
-| 4 | **M Anwar Ismail** | Firmware: Line Follower & Motor | Pemrograman PID kendali garis di Core 1 FreeRTOS, kalibrasi manuver belok 90° motor DC via L298N. |
-| 5 | **A Hisyammuddin** | Firmware: Sensor TCS3200 Node Marker | Pemrograman deteksi marka pita warna persimpangan node, validasi event `NODE_ARRIVED`. |
-| 6 | **A Shobrun Jamil** | Firmware: Ultrasonik & Volume Sampah | Logika pengukuran kapasitas sampah internal, mekanisme dwell timer buka-tutup servo otomatis. |
-| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Integrasi sensor FC-51 anti-tabrak di depan robot, fabrikasi fisik bak sampah dan dudukan servo. |
-| 8 | **M Jazaul Aufi** | Testing, Dokumentasi & Demo Prep | Pengujian integrasi jalur di lantai, rekaman video demonstrasi UAS, dan penyusunan berkas laporan akhir. |
+| 1 | **Adam Rahmatulloh** | Project Leader & Hardware Lead | Integrasi sasis mekanik 4 roda, pengkabelan breadboard, dan manajemen catu daya. |
+| 2 | **M Ilham Jazuli** | Frontend Developer | Pembuatan dashboard web React (Port 5193), Graph Viewer, dan dynamic station button. |
+| 3 | **M Thoriq Dhiyaul Haq** | Cloud IoT & System Architect | Setup Supabase DB, integrasi channel Realtime/MQTT, dan Graph Editor interface. |
+| 4 | **M Anwar Ismail** | Firmware: Line Follower & Motor | Pemrograman PID kendali garis di Core 1 FreeRTOS, kalibrasi manuver belok 90° via L298N. |
+| 5 | **A Hisyammuddin** | Firmware: Sensor TCS3200 Node Marker | Pemrograman deteksi marka warna pita persimpangan node, validasi event `NODE_ARRIVED`. |
+| 6 | **A Shobrun Jamil** | Firmware: Ultrasonik & Volume Sampah | Logika pengukuran kapasitas sampah internal, mekanisme buka-tutup servo dan *dwell timer*. |
+| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Integrasi sensor FC-51 anti-tabrak di depan robot, fabrikasi bak sampah dan dudukan servo. |
+| 8 | **M Jazaul Aufi** | QA Tester, Demo Prep & Dokumen | Pengujian integrasi jalur di lantai, rekaman video demonstrasi UAS, dan laporan akhir. |
 
 ---
 
-## 9. Kesimpulan & Roadmap Eksekusi Cepat
+## 9. Kesimpulan & Panduan Eksekusi Tim
 
-1. **Sistem Sepenuhnya Dinamis:** Sistem tidak lagi terkunci pada aturan kaku "harus 3 user", melainkan berbasis **Graf $N$ Node** yang fleksibel menyesuaikan berapa pun titik henti yang dibuat di lintasan fisik.
-2. **Sensor TCS3200 Pragmatis & Andal:** Sensor warna digunakan sebagai penanda simpul node di persimpangan lintasan, memangkas risiko kegagalan kalibrasi warna di hadapan penguji.
-3. **Database Ultra-Ringan:** Database hanya memuat topologi graf dan status telemetri berukuran kecil (< 50 byte), menjamin responsivitas tinggi pada koneksi hotspot kelas.
-4. **Langkah Kerja Langsung:** Sesuai ajakan tim di WhatsApp (*"Besok gasssinnn... dicicil dashboard sama graph editor e, ben besok habis ngerangkai alat tinggal diconnect in"*), tim dapat langsung membagi perakitan hardware dan pembuatan web dashboard berbasis dokumen ini.
+1. **Konfirmasi Fitur Deteksi Volume:** Dikonfirmasi bahwa fitur "Deteksi Volume" adalah **pengukuran persentase volume kepenuhan sampah** di dalam wadah menggunakan sensor HC-SR04 internal.
+2. **Efisiensi Arsitektur Serverless:** Pendapat rekan tim telah diadopsi ke dalam analisis resmi: sistem dioptimalkan menggunakan arsitektur **React + Supabase** tanpa kewajiban backend Laravel, karena graf dan Dijkstra telah berjalan mandiri di RAM ESP32.
+3. **Kesiapan Eksekusi:** Konfigurasi database Supabase telah siap, alokasi pinout ESP32 telah dipetakan, dan spesifikasi 3 halaman website telah dirancang lengkap untuk langsung dieksekusi oleh tim.
