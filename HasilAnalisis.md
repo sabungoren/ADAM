@@ -1,4 +1,4 @@
-# LAPORAN ANALISIS SISTEM DAN KEPUTUSAN ARSITEKTUR
+# LAPORAN ANALISIS SISTEM, KEPUTUSAN ARSITEKTUR, DAN TELAAH SPESIFIKASI TEKNIS
 ## Proyek Ujian Akhir Semester Mata Kuliah Internet of Things (IoT)
 ### Sistem Smart ADAM (Autonomous Dustbin And Management) - Kelompok 1
 
@@ -7,7 +7,7 @@
 ### Informasi Kelompok & Proyek
 * **Kelompok:** Kelompok 1 (Kelas IoT 24E)
 * **Judul Proyek:** Smart ADAM (Autonomous Dustbin And Management)
-* **Anggota Kelompok:**
+* **Anggota Kelompok (8 Mahasiswa):**
   1. Adam Rahmatulloh
   2. M Ilham Jazuli
   3. M Thoriq Dhiyaul Haq
@@ -16,316 +16,238 @@
   6. A Shobrun Jamil
   7. Ramzi Pandu Ma'arif
   8. M Jazaul Aufi
-* **Platform Kontroler:** ESP32 / ESP8266 (Konektivitas Wi-Fi)
-* **Sensor:** Sensor Line Follower IR (3–5 Channel), Sensor Ultrasonik HC-SR04 (Buka-tutup & Volume), IR Obstacle (FC-51), Sensor Warna TCS3200
-* **Aktuator & Driver:** DC Motor + Driver L298N, Servo Motor (SG90 / MG995)
+* **Platform Kontroler:** ESP32 Development Board (Dual Core 240 MHz, Wi-Fi & Bluetooth)
+* **Inventaris Alat dan Bahan (Lengkap & Terverifikasi):**
+  - ESP32 Development Board
+  - Breadboard
+  - Kabel Jumper Male-to-Male & Male-to-Female
+  - Sensor Line Follower IR 3–5 Channel
+  - Sensor Ultrasonik HC-SR04
+  - Sensor IR Obstacle FC-51
+  - Motor DC Gearbox + Roda (4 set)
+  - Driver Motor DC L298N
+  - Sasis Robot 4 Roda
+  - Servo Motor SG90 / MG995
+  - Baterai Li-ion 18650 (2-3 Slot) + Holder Baterai
+  - Sensor Warna RGB TCS3200
 
 ---
 
-## 1. Analisis dan Argumen: Pemilihan Jumlah User (2 User vs 3 User)
+## 1. Konsensus Tim dan Klarifikasi Dokumen `spec.md`
 
-Pada sesi bimbingan sebelumnya, dosen penguji/pembimbing menyarankan penggunaan **2 User**, sedangkan hasil diskusi internal tim mengusulkan implementasi **3 User**. Berikut adalah komparasi teknis, analisis dampak, serta argumen keputusan:
+Berdasarkan diskusi internal kelompok, telah disepakati klarifikasi penting mengenai pembagian ruang lingkup proyek:
 
-### 1.1 Tabel Analisis Perbandingan
+> **Klarifikasi Ruang Lingkup:**
+> Dokumen `spec.md` dirancang secara spesifik sebagai **Subsistem Navigasi & Mobilitas Robot (Robot Motion Engine)**, yaitu bagaimana robot bergerak di atas garis, membaca graf lintasan, dan bernavigasi secara mandiri di mikrokontroler. 
+> Dokumen tersebut sengaja **tidak mencakup seluruh sistem aplikasi** agar arsitektur database cloud dan pertukaran data IoT tetap **sangat ringan (Ultra-Lightweight Database)**, hemat memori RAM pada ESP32, dan tidak membebani kuota jaringan Wi-Fi saat demonstrasi di kelas.
 
-| Parameter Evaluasi | Opsi 2 User (Saran Dosen) | Opsi 3 User (Usulan Tim) |
+Seluruh anggota kelompok menyetujui pembagian modular ini dengan pendekatan **Decoupled System Architecture** (Pemisahan Tanggung Jawab antar Modul):
+
+```
++---------------------------------------------------------------------------------------+
+|                                ARSITEKTUR TERPADU SMART ADAM                          |
++---------------------------------------------------------------------------------------+
+|  [ MODUL 1: FRONTEND WEB & USER ]  <───>  [ MODUL 2: LIGHTWEIGHT IOT DATABASE ]       |
+|  - 3 Profil User (Hijau, Biru, Kuning)    - Format Data Ringkas (1 - 4 Byte Payload)  |
+|  - Dashboard 3 Tombol Utama               - Antrean Panggilan FIFO Sederhana          |
+|  - Tombol Deteksi Volume Sampah           - Bridge MQTT / REST API Minimalis          |
++---------------------------------------------------------------------------------------+
+                                        │
+                                        │ (WiFi Socket: MQTT / Telemetri Ringkas)
+                                        ▼
++---------------------------------------------------------------------------------------+
+|                           [ MODUL 3 & 4: ROBOT HARDWARE & FIRMWARE ]                  |
+|  [ MODUL 3: MOTION ENGINE (spec.md) ]       [ MODUL 4: DUSTBIN & SENSING ]            |
+|  - Navigasi Graf & Dijkstra Lokal (RAM)     - HC-SR04 Deteksi Tangan (Servo Buka)     |
+|  - PID Line Follower di FreeRTOS Core 1     - HC-SR04 Internal Ukur Volume Sampah     |
+|  - Sensor TCS3200 Deteksi Marka Stasiun     - FC-51 Anti-Tabrak (Safety Stop Lokal)   |
++---------------------------------------------------------------------------------------+
+```
+
+---
+
+## 2. Desain Database Ultra-Ringan (Lightweight Database Strategy)
+
+Sesuai kesepakatan kelompok agar database sesederhana dan seringan mungkin, sistem menghindari query relasional yang kompleks atau struktur JSON bersarang (*deeply nested*).
+
+### 2.1 Mengapa Database Menjadi Jauh Lebih Ringan?
+1. **Graf Peta Disimpan Lokal di RAM ESP32:** Struktur lintasan (bobot edge dan arah mata angin) tidak disimpan atau di-query berulang kali ke database. Database cloud hanya perlu tahu kode node tujuan (misal: `'B'`, `'C'`, atau `'D'`). Komputasi rute Dijkstra diselesaikan 100% di dalam mikrokontroler ESP32.
+2. **Ukuran Payload Sangat Kecil (1 s.d. 4 Byte):** Menggunakan karakter tunggal atau nilai integer sederhana (misal status `'I'`, `'M'`, `'F'`, `'E'`, level sampah `0`–`100`).
+3. **Pemberhentian Darurat Bersifat Lokal:** Sensor anti-tabrak FC-51 memutus aliran PWM motor langsung di firmware tanpa perlu menunggu perintah dari server/database.
+
+### 2.2 Skema Data Ringkas (Minimalist State Machine)
+
+Hanya terdapat 3 entitas data sederhana di database/broker:
+
+#### A. Status Robot (`robot_state`) &mdash; Ukuran: ~40 Byte
+```json
+{
+  "pos": "A",
+  "status": "I",
+  "trash": 32,
+  "bat": 85
+}
+```
+*Keterangan Field:*
+* `pos`: Lokasi node saat ini (`'A'` = Home, `'B'` = User 1, `'C'` = User 2, `'D'` = User 3).
+* `status`: Kondisi operasional (`'I'` = Idle, `'M'` = Moving, `'F'` = Fetching/Serving, `'E'` = Error, `'O'` = Obstacle).
+* `trash`: Persentase kapasitas sampah (0 s.d. 100%).
+* `bat`: Persentase baterai robot (0 s.d. 100%).
+
+#### B. Antrean Panggilan (`call_queue`) &mdash; Ukuran: ~15 Byte
+Antrean ringkas berupa array karakter node tujuan dengan aturan FIFO (*First-In, First-Out*):
+```json
+{
+  "queue": ["B", "C"]
+}
+```
+
+#### C. Master Pengguna (`users`) &mdash; Bersifat Statis di Sisi Frontend Web
+Data pengguna disimpan langsung di sisi client (Local Web Storage / Config File Frontend), sehingga tidak membebani pembacaan ke cloud database.
+
+---
+
+## 3. Analisis dan Argumen: Pemilihan Jumlah User (2 User vs 3 User)
+
+Dosen pembimbing sebelumnya menyarankan **2 User**, namun tim kelompok telah sepakat menerapkan **3 User**. Berikut adalah landasan argumen teknisnya:
+
+### 3.1 Evaluasi Komparatif
+
+| Parameter Evaluasi | Opsi 2 User (Saran Dosen) | Opsi 3 User (Kesepakatan Tim) |
 | :--- | :--- | :--- |
-| **Kompleksitas Jalur Fisik (Line Track)** | Sederhana. Cukup jalur lurus bercabang 2 atau 2 titik henti di jalur loop. | Menengah. Memerlukan 3 titik henti dengan percabangan (T-junction/Y-junction) atau lintasan loop 3 stasiun. |
-| **Pemanfaatan Sensor TCS3200 (RGB)** | Kurang optimal. Membedakan 2 titik warna lantai sebenarnya bisa digantikan hanya dengan pembacaan garis biasa (counting junction). | **Sangat Optimal**. Sensor warna TCS3200 dapat mendeteksi 3 warna spesifik (Merah, Hijau, Biru) untuk stasiun masing-masing user. |
-| **Logika Antrean Robot (Queue System)** | Terlalu sederhana; saat 1 user memanggil, antrean maksimal hanya 1 request pending. | **Menguji Algoritma Secara Nyata**. Menunjukkan kapabilitas antrean FIFO (First-In, First-Out) saat 2 atau 3 user memanggil berdekatan. |
-| **Tingkat Keberhasilan Demo Langsung** | Sangat tinggi, risiko tabrakan/gagal baca garis kecil. | Cukup tinggi asalkan kalibrasi sensor TCS3200 dan pencahayaan ruangan stabil. |
-| **Beban Kerja 8 Anggota Kelompok** | Terlalu ringan untuk kelompok beranggotakan 8 mahasiswa. | **Proporsional**. Pembagian tugas hardware, navigasi, frontend, backend, mekanik, dan QA terisi seimbang. |
+| **Korelasi dengan Graf `spec.md`** | Kurang optimal. Graf hanya 3 node (Home, User 1, User 2), rute Dijkstra terlalu sepele. | **Sangat Sesuai**. Membentuk graf 4 node (A = Home, B = User 1, C = User 2, D = User 3) yang mendemonstrasikan algoritma Dijkstra secara nyata. |
+| **Fungsi Sensor Warna TCS3200** | Rendah. Membedakan 2 titik henti cukup menggunakan sensor garis biasa (counting intersection). | **Fungsional Penuh**. Membaca 3 warna spesifik marka stasiun: Hijau (User 1), Biru (User 2), dan Kuning/Merah (User 3). |
+| **Beban Kueri Database** | Sangat ringan. | **Tetap Sangat Ringan**. Menggunakan antrean karakter tunggal (`["B", "C", "D"]`) dengan selisih beban memori kurang dari 10 byte. |
+| **Proporsionalitas 8 Anggota** | Terlalu sederhana untuk tim beranggotakan 8 mahasiswa. | **Tepat dan Seimbang**. Beban kerja firmware, hardware, backend, web, dan mekanik terbagi merata. |
+| **Strategi Mitigasi (Fallback Plan)** | Tidak ada tantangan teknis. | Jika saat demo arena fisik kelas sempit, User 3 dapat di-disable dari web menjadi 2 User tanpa mengubah kode robot. |
 
-### 1.2 Argumen dan Rekomendasi Keputusan
+### 3.2 Pemetaan Identitas Pengguna & Node Graf
 
-**Rekomendasi Tim:** **Menerapkan Arsitektur 3 User secara Default dengan Mekanisme Fallback 2 User.**
-
-**Alasan Argumen:**
-1. **Justifikasi Komponen Sensor RGB TCS3200:**
-   Di dalam spreedsheet tertera sensor warna TCS3200. Jika hanya ada 2 user, penggunaan sensor warna menjadi *overkill* karena robot bisa sekadar berhenti di persimpangan 1 atau persimpangan 2 menggunakan sensor IR. Dengan 3 User, sensor TCS3200 berfungsi krusial untuk mencocokkan kode warna stasiun:
-   * **Stasiun User 1:** Marka Warna Merah
-   * **Stasiun User 2:** Marka Warna Hijau
-   * **Stasiun User 3:** Marka Warna Biru
-   Hal ini memberi nilai akademis tinggi di mata penguji bahwa komponen yang diajukan benar-benar bekerja fungsional, bukan sekadar pelengkap proposal.
-2. **Skalabilitas Software (Backend & Frontend):**
-   Membuat database dan antarmuka untuk 3 user memiliki kompleksitas kode yang praktis sama dengan 2 user jika dirancang modular (berbasis ID dinamis). 
-3. **Strategi Demo UAS (Safety Plan):**
-   * *Rencana Utama (Plan A):* Demo sistem penuh dengan 3 titik stasiun pemanggil.
-   * *Rencana Cadangan (Plan B):* Jika lintasan fisik di ruang kelas terbatas saat hari presentasi, user ke-3 dapat dinonaktifkan via toggle admin tanpa merombak arsitektur basis data.
+| Label User | ID Pengguna | Node Graf (`spec.md`) | Warna Dashboard & Hex | Lokasi Stasiun | Marka Fisik Lantai (TCS3200) |
+| :--- | :--- | :---: | :--- | :--- | :--- |
+| **User 1** | `USR-01` | **Node B** | **Hijau Emerald** (`#10B981`) | Meja Alpha (Sisi Kiri) | Pita Warna Hijau |
+| **User 2** | `USR-02` | **Node C** | **Biru Laut** (`#3B82F6`) | Meja Beta (Sisi Tengah) | Pita Warna Biru |
+| **User 3** | `USR-03` | **Node D** | **Kuning Amber** (`#F59E0B`) | Meja Gamma (Sisi Kanan) | Pita Warna Kuning / Merah |
+| *Home Base* | `BASE-00` | **Node A** | Abu-Abu Netral (`#6B7280`) | Titik Parkir Utama | Garis Hitam Melintang Tebal |
 
 ---
 
-## 2. Struktur Pengguna (User Identity & Visual Token)
+## 4. Analisis Antarmuka Website Frontend
 
-Untuk membedakan stasiun kerja dan pemanggil, setiap user diberikan identitas visual, kode ID, serta warna penanda yang terintegrasi antara website dashboard, sensor RGB, dan indikator robot:
+### 4.1 Desain Dashboard dan 3 Tombol Utama
 
-| User Label | User ID | Kode Stasiun | Identitas Warna (Hex) | Deskripsi Posisi Fisik | Marka Lantai (TCS3200) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **User 1** | `USR-01` | `ST-ALPHA` | **Hijau Emerald** (`#10B981`) | Meja Kerja 1 / Sisi Kiri | Gelombang Hijau |
-| **User 2** | `USR-02` | `ST-BETA` | **Biru Laut** (`#3B82F6`) | Meja Kerja 2 / Sisi Tengah | Gelombang Biru |
-| **User 3** | `USR-03` | `ST-GAMMA` | **Kuning Amber** (`#F59E0B`) | Meja Kerja 3 / Sisi Kanan | Gelombang Merah / Oranye |
-| *Home Base* | `BASE-00` | `ST-HOME` | Abu-Abu Netral (`#6B7280`) | Titik Parkir & Standby Utama | Garis Hitam Tebal / Putih |
+Dashboard dirancang bersih, intuitif, dan responsif dengan status telemetri yang diperbarui secara langsung melalui koneksi ringan (SSE / WebSocket):
+
+```text
++-----------------------------------------------------------------------------------------+
+|                              SMART ADAM - IOT CONTROL PANEL                             |
+|  Koneksi: [ONLINE]  |  Posisi: [Node A - HOME]  |  Baterai: [85%]  |  Level Tong: [32%] |
++-----------------------------------------------------------------------------------------+
+|  PROFIL AKTIF:   [ (1) USR-01 (Hijau) ]   [*(2) USR-02 (Biru)*]   [ (3) USR-03 (Kuning) ]|
++-----------------------------------------------------------------------------------------+
+|                                                                                         |
+|    +--------------------------+       +--------------------------+                      |
+|    |  [TOMBOL 1]              |       |  [TOMBOL 2]              |                      |
+|    |  PANGGIL ADAM KE SINI    |       |  SELESAI & KEMBALI BASE  |                      |
+|    |  (Aksen Warna User Aktif)|       |  (Kirim Pulang ke Home)  |                      |
+|    +--------------------------+       +--------------------------+                      |
+|                                                                                         |
+|    +-------------------------------------------------------------+                      |
+|    |  [TOMBOL 3] DETEKSI VOLUME SAMPAH REAL-TIME                 |                      |
+|    |  (Memicu pembacaan ultrasonik & pembaruan kapasitas tong)   |                      |
+|    +-------------------------------------------------------------+                      |
+|                                                                                         |
++-----------------------------------------------------------------------------------------+
+|  STATUS SISTEM:                                                                         |
+|  - Kapasitas Wadah : [========>                         ] 32% (Status: AMAN)            |
+|  - Rintangan Depan : [TIDAK ADA HALANGAN]                                               |
+|  - Antrean Panggilan: 1. USR-02 (Sedang dilayani)  |  2. USR-01 (Menunggu)              |
++-----------------------------------------------------------------------------------------+
+```
+
+### 4.2 Logika Operasional 3 Tombol Dashboard
+
+1. **Tombol 1 &mdash; Panggil ADAM ke Sini:**
+   * Mengirim target node stasiun pengguna aktif (contoh: `'C'` untuk User 2) ke database antrean.
+   * Tombol otomatis menampilkan status *Queued* jika robot sedang bergerak menuju stasiun lain.
+   * Berwarna sesuai identitas user aktif (Hijau/Biru/Kuning).
+
+2. **Tombol 2 &mdash; Selesai & Kembali ke Home Base:**
+   * Digunakan saat pengguna selesai membuang sampah sebelum *dwell timer* habis.
+   * Servo tempat sampah segera menutup rapat, dan robot melanjutkan ke stasiun berikutnya di antrean atau pulang ke Node A (Home).
+
+3. **Tombol 3 &mdash; Deteksi Volume Sampah Real-Time:**
+   * Memicu pembacaan instan (*on-demand*) sensor ultrasonik internal wadah sampah.
+   * Bilah kapasitas terbagi menjadi 3 indikator visual:
+     * **0% s.d. 50% (Hijau):** Kapasitas aman.
+     * **51% s.d. 80% (Kuning):** Kapasitas mendekati penuh.
+     * **> 80% (Merah):** Peringatan sampah penuh (Panggilan robot dikunci sementara di dashboard hingga bak sampah dikosongkan).
 
 ---
 
-## 3. Analisis Frontend Dashboard
+## 5. Rincian Subsistem Hardware dan Navigasi Robot
 
-### 3.1 Spesifikasi Layout & 3 Tombol Utama
-Website dashboard didesain dengan hierarki visual yang jelas, responsif, dan memberikan umpan balik status secara real-time.
+### 5.1 Integrasi Spesifikasi `spec.md` (Motion Engine)
+* **Graf Undirected Berbobot:** Graf 4 node direpresentasikan dalam matriks biner 1D ringkas di RAM ESP32 (1 byte per relasi: 2 bit arah mata angin + 6 bit bobot jarak).
+* **Algoritma Dijkstra Lokal:** Saat ada node tujuan baru di antrean, `Task Route Finder` (Core 0 FreeRTOS) menghitung rute terpendek dalam hitungan milidetik.
+* **Kendali Jalur Berbasis PID & Garis:** `Task Executor` (Core 1 FreeRTOS, loop 100 Hz) mengatur PWM motor DC L298N agar robot tetap stabil di atas garis hitam.
+* **Deteksi Titik Henti Stasiun:** Sensor TCS3200 memvalidasi warna pita di persimpangan lantai untuk memastikan robot telah tiba di stasiun pemanggil yang benar.
 
-```
-+-------------------------------------------------------------------------------+
-|                        SMART ADAM - IOT CONTROL PANEL                         |
-|  [Status Robot: STANDBY @ HOME]   [Level Sampah: 42%]   [Koneksi: ONLINE]     |
-+-------------------------------------------------------------------------------+
-|  PROFIL AKTIF: USER 2 (ID: USR-02) - MEJA KERJA BETA (Warna Aksen: BIRU)      |
-+-------------------------------------------------------------------------------+
-|                                                                               |
-|  [ TOMBOL 1: PANGGIL ADAM ]      [ TOMBOL 2: PULANG KE BASE ]                 |
-|  (Warna Aksen User / Animasi)    (Kembalikan robot segera)                    |
-|                                                                               |
-|  [ TOMBOL 3: DETEKSI VOLUME SAMPAH REAL-TIME ]                                |
-|  (Trigger sensor & update persentase kapasitas tong)                          |
-|                                                                               |
-+-------------------------------------------------------------------------------+
-|  STATUS SISTEM & MONITORING:                                                  |
-|  - Posisi Terakhir   : BASE-00                                                |
-|  - Volume Sampah     : [=========>                  ] 42% (Aman)              |
-|  - Antrean Pemanggilan: USR-02 (Diproses), USR-01 (Menunggu)                  |
-+-------------------------------------------------------------------------------+
-```
-
-### 3.2 Rincian Fungsi 3 Tombol Dashboard
-
-1. **Tombol 1: "PANGGIL ADAM KE LOKASI SAYA" (Call Button)**
-   * **Fungsi:** Mengirimkan *command* pemanggilan ke robot dengan menyertakan payload `user_id` dan `target_station`.
-   * **Logika Interaksi:**
-     * Ketika ditekan: tombol beralih ke state *Loading/Dispatched*.
-     * Jika robot sedang melayani user lain, tombol menampilkan notifikasi: *"Robot sedang menuju User lain, Anda masuk Antrean #1"*.
-     * Warna tombol menyesuaikan identitas user aktif (Hijau/Biru/Kuning).
-
-2. **Tombol 2: "SELESAI / KEMBALIKAN KE HOME BASE" (Dismiss/Return Button)**
-   * **Fungsi:** Mengirim instruksi bahwa pembuangan sampah telah selesai sehingga robot dapat segera melanjutkan antrean berikutnya atau kembali ke titik stasiun parkir awal (`BASE-00`).
-   * **Logika Interaksi:**
-     * Aktif saat robot telah tiba di posisi user pemanggil (`state: ARRIVED_AT_USER`).
-     * Menutup servo secara manual jika belum tertutup otomatis, lalu mengaktifkan navigasi kepulangan.
-
-3. **Tombol 3: "DETEKSI & PERBARUI VOLUME SAMPAH" (Check Capacity Button)**
-   * **Fungsi:** Mengirim instruksi pembacaan instan (*on-demand trigger*) ke sensor ultrasonik internal wadah sampah untuk mendapatkan data kapasitas sampah termutakhir.
-   * **Visualisasi Output:**
-     * Menampilkan progres bar kapasitas (0% s.d. 100%).
-     * **Status Hijau (0% - 50%):** Kapasitas Luang / Aman.
-     * **Status Kuning (51% - 80%):** Kapasitas Mendekati Penuh.
-     * **Status Merah (> 80%):** Sampah Penuh (*Warning Banner* muncul; tombol Panggil dinonaktifkan sementara sampai sampah dikosongkan).
-
-### 3.3 Ringkasan Modul Frontend
-* **User Generator / Session Selector:** Komponen dropdown atau tombol *switch user* untuk beralih mode perspektif (User 1, User 2, User 3).
-* **Button State Management:** Mencegah *spamming command* (disable tombol saat transmisi berlangsung atau saat robot sedang *in-transit*).
-* **Live Telemetry View:** Widget status koneksi robot (indikator *heartbeat ping*), estimasi waktu kedatangan, dan indikator volume sampah.
+### 5.2 Subsistem Tempat Sampah & Pengaman Halangan (Dustbin & Safety)
+* **Buka-Tutup Tutup Otomatis (HC-SR04 Eksternal):** Mendeteksi keberadaan tangan pengguna pada jarak < 15 cm. Servo membuka tutup 90° dan memulai *dwell timer* (15 detik). Jika ada gerakan tangan lagi, timer di-reset otomatis.
+* **Pengukuran Volume Sampah (HC-SR04 Internal):** Ditempatkan di bawah tutup bagian dalam, memancarkan gelombang suara ke tumpukan sampah untuk menghitung persentase volume terisi.
+* **Anti-Tabrak Seketika (Sensor FC-51):** Dipasang di bagian depan sasis robot. Saat mendeteksi benda/kaki pada jarak < 10 cm, sensor langsung memutus daya motor via interupsi digital lokal untuk mencegah tabrakan fisik.
 
 ---
 
-## 4. Analisis Backend, Database, dan Alur Robot
+## 6. Pemetaan Pinout GPIO ESP32 dan Manajemen Daya
 
-### 4.1 Arsitektur Komunikasi IoT
-Sistem menggunakan pola komunikasi terdistribusi antara Frontend, Cloud Database/Broker, dan Mikrokontroler Robot:
+Berikut adalah pemetaan pin lengkap pada papan ESP32 (38-pin version):
 
-```
-[ Frontend Web (HTML/JS) ]
-          │   ▲
-          │   │  HTTP REST / WebSocket / Realtime Sync
-          ▼   │
-[ Backend / Database (Firebase RTDB / Supabase / MQTT Broker) ]
-          │   ▲
-          │   │  Wi-Fi Protocol (JSON Payload)
-          ▼   │
-[ Robot ESP32 Controller ]
-   ├── Sensor IR Line Follower (Navigasi Garis)
-   ├── Sensor TCS3200 (Identifikasi Warna Stasiun User)
-   ├── Sensor HC-SR04 Eksternal (Deteksi Manusia -> Buka Servo)
-   ├── Sensor HC-SR04 Internal (Deteksi Ketinggian Sampah)
-   ├── Sensor FC-51 IR Obstacle (Pencegah Tabrakan / Emergency Stop)
-   ├── Driver L298N + 2x Motor DC (Gerak Robot)
-   └── Servo Motor (Mekanisme Tutup Sampah)
-```
+| Modul / Komponen | Pin Sinyal Modul | Pin GPIO ESP32 | Mode Operasi | Fungsi Utama |
+| :--- | :--- | :---: | :--- | :--- |
+| **Driver Motor L298N** | ENA (PWM Motor Kiri) | `GPIO 14` | Output (LEDC) | Pengatur kecepatan motor kiri |
+| | IN1 & IN2 (Arah Kiri) | `GPIO 27`, `GPIO 26` | Output Digital | Logika arah maju/mundur roda kiri |
+| | ENB (PWM Motor Kanan) | `GPIO 32` | Output (LEDC) | Pengatur kecepatan motor kanan |
+| | IN3 & IN4 (Arah Kanan) | `GPIO 25`, `GPIO 33` | Output Digital | Logika arah maju/mundur roda kanan |
+| **Sensor Line Follower** | Sensor Kiri (IR 1) | `GPIO 34` | Input Digital | Deteksi garis sisi kiri |
+| | Sensor Tengah (IR 2) | `GPIO 35` | Input Digital | Pemandu garis tengah |
+| | Sensor Kanan (IR 3) | `GPIO 39` (VN) | Input Digital | Deteksi garis sisi kanan |
+| **Sensor Warna TCS3200** | S0, S1 (Frekuensi) | `GPIO 19`, `GPIO 18` | Output Digital | Pengaturan penskalaan frekuensi |
+| | S2, S3 (Filter Warna) | `GPIO 5`, `GPIO 17` | Output Digital | Pemilihan filter Merah, Hijau, Biru |
+| | OUT (Output Pulsa) | `GPIO 16` | Input (Interupsi) | Pembacaan frekuensi warna marka |
+| **Sensor Ultrasonik HC-SR04** | Trig Pin | `GPIO 4` | Output Digital | Pemicu pulsa 10 µs |
+| | Echo Pin | `GPIO 15` | Input (*Divider*) | Penerima pantulan sinyal (5V ke 3.3V) |
+| **Sensor Obstacle FC-51** | OUT Digital | `GPIO 13` | Input Digital | Rem darurat anti-tabrak (`LOW` = Stop) |
+| **Servo Motor** | Signal PWM | `GPIO 23` | Output (LEDC) | Buka (90°) dan tutup (0°) tempat sampah |
+| **Buzzer Indikator** | Positif Buzzer | `GPIO 2` | Output Digital | Sinyal suara kedatangan dan peringatan |
 
-### 4.2 Skema Basis Data (Database Schema)
-
-Skema database dirancang ramping agar efisien diproses mikrokontroler (misalnya berbasis Firebase Realtime Database JSON Tree atau PostgreSQL/MySQL).
-
-#### Entitas 1: `robot_status` (Tabel Status Robot Tunggal)
-Menyimpan kondisi fisik dan operasional robot secara real-time.
-```json
-{
-  "robot_id": "ADAM-01",
-  "current_state": "IDLE", 
-  "target_station": "BASE-00",
-  "active_user_id": null,
-  "trash_level_percent": 35.5,
-  "trash_distance_cm": 16.2,
-  "is_lid_open": false,
-  "obstacle_detected": false,
-  "last_updated": 1729415532
-}
-```
-*Daftar Nilai `current_state`:*
-* `IDLE`: Siaga di Home Base.
-* `MOVING_TO_USER`: Sedang berjalan menelusuri garis menuju user pemanggil.
-* `ARRIVED_SERVING`: Tiba di lokasi user, membuka tutup sampah otomatis saat terdeteksi tangan.
-* `RETURNING_HOME`: Bergerak kembali menuju titik awal (Home Base).
-* `OBSTACLE_STOP`: Berhenti darurat karena terhalang objek di depan.
-* `FULL_LOCK`: Terkunci karena kapasitas sampah > 85%.
-
-#### Entitas 2: `call_queue` (Tabel Antrean Pemanggilan)
-Menangani request dari banyak user dengan aturan FIFO (*First-In, First-Out*).
-```json
-{
-  "requests": {
-    "REQ-101": {
-      "user_id": "USR-02",
-      "target_station": "ST-BETA",
-      "status": "QUEUED",
-      "timestamp": 1729415500
-    },
-    "REQ-102": {
-      "user_id": "USR-01",
-      "target_station": "ST-ALPHA",
-      "status": "QUEUED",
-      "timestamp": 1729415520
-    }
-  }
-}
-```
-
-#### Entitas 3: `users_station` (Master Data User)
-```json
-{
-  "USR-01": { "name": "User 1 (Alpha)", "color_hex": "#10B981", "color_target": "GREEN", "station": "ST-ALPHA" },
-  "USR-02": { "name": "User 2 (Beta)",  "color_hex": "#3B82F6", "color_target": "BLUE",  "station": "ST-BETA" },
-  "USR-03": { "name": "User 3 (Gamma)", "color_hex": "#F59E0B", "color_target": "RED",   "station": "ST-GAMMA" }
-}
-```
+### Manajemen Catu Daya (Mencegah Brownout Reset)
+* **Daya Motor & Servo:** Menggunakan 2 cell baterai 18650 secara seri (7.4V – 8.4V) ke terminal daya driver L298N.
+* **Daya Mikrokontroler & Sensor:** Output regulator 5V dari modul L298N dihubungkan ke pin `VIN` ESP32, HC-SR04, dan TCS3200.
+* **Penyatuan Ground (*Common Ground*):** Seluruh jalur ground (Baterai, L298N, Servo, dan ESP32) **wajib disatukan** pada rel breadboard untuk menjaga stabilitas level logika digital.
 
 ---
 
-## 5. Alur Logika Robot (State Machine & Logic Flow)
+## 7. Matriks Pembagian Tugas Anggota Kelompok 1 (8 Mahasiswa)
 
-### 5.1 Diagram Alir Operasional
+Beban kerja dibagi secara jelas sesuai bidang keahlian dan komponen yang ditangani:
 
-```
-       [ START / IDLE @ HOME BASE ]
-                   │
-                   ▼
-     [ User Menekan Tombol Panggil ]
-                   │
-                   ▼
-      [ Cek Kapasitas Sampah ]
-         ├── Penuh (> 85%) ──> [ Tolak Panggilan & Tampilkan Peringatan di Web ]
-         │
-         └── Aman (< 85%)
-                   │
-                   ▼
-     [ Robot Bergerak Mengikuti Garis (Line Follower) ]
-                   │
-                   ├── Ada Rintangan? (FC-51) ──> [ Berhenti Sementara Hingga Halangan Hilang ]
-                   │
-                   ▼
-     [ Sensor TCS3200 Membaca Marka Warna Stasiun Pemanggil ]
-                   │
-                   ▼
-       [ Warna Cocok dengan User ID? ]
-         ├── Tidak ──> Tetap Lanjut Telusuri Garis
-         │
-         └── Ya ──> [ Robot Berhenti di Stasiun User ]
-                         │
-                         ▼
-           [ Sensor Ultrasonik Mendeteksi Tangan Pengguna (< 15 cm) ]
-                         │
-                         ▼
-             [ Servo Membuka Tutup Tempat Sampah ]
-                         │
-                         ▼
-             [ Timer Tunggu (5-7 Detik) / Tangan Menjauh ]
-                         │
-                         ▼
-             [ Servo Menutup Tutup Tempat Sampah ]
-                         │
-                         ▼
-         [ Sensor Internal Mengukur Level Volume Sampah ]
-                         │
-                         ▼
-             [ Kirim Update Data Volume ke Database ]
-                         │
-                         ▼
-             [ Cek Antrean Panggilan Lain ]
-               ├── Ada Antrean ──> Bergerak ke Stasiun User Berikutnya
-               │
-               └── Kosong ──> [ Navigasi Kembali ke Home Base ]
-                                       │
-                                       ▼
-                             [ FINISH / STANDBY ]
-```
-
-### 5.2 Rincian Tahapan Eksekusi Hardware
-
-1. **Inisialisasi & Idle Mode:**
-   * ESP32 terhubung ke Wi-Fi dan menyinkronkan status ke database.
-   * Robot berada di titik `BASE-00`.
-   * Motor DC mati, servo dalam posisi 0° (tutup tertutup rapat).
-
-2. **Penerimaan Perintah & Pengecekan Awal:**
-   * Listener database di ESP32 mendeteksi ada record berstatus `QUEUED`.
-   * Sistem membaca sensor volume sampah: jika jarak ruang sisa < 4 cm (tong penuh), status diubah ke `FULL_LOCK`, buzzer berbunyi, dan perintah dibatalkan. Jika aman, status berubah ke `MOVING_TO_USER`.
-
-3. **Navigasi Garis & Keamanan:**
-   * Sensor Line Follower IR (3–5 channel) memandu modul driver L298N untuk menjaga arah gerak robot di atas garis.
-   * Sensor IR Obstacle (FC-51) aktif terus menerus. Jika mendeteksi benda/orang di depan dalam jarak < 10 cm, PWM motor diset ke 0 (berhenti seketika) hingga jalur bebas kembali.
-
-4. **Deteksi Titik Henti Stasiun Pengguna:**
-   * Sensor TCS3200 membaca nilai intensitas frekuensi warna pada lantai.
-   * Apabila nilai warna mendeteksi warna spesifik stasiun pemanggil (misal `GREEN` untuk User 1), motor berhenti penuh dan robot membunyikan nada bip penanda kedatangan.
-
-5. **Interaksi Buka-Tutup Otomatis:**
-   * Sensor HC-SR04 di bibir tempat sampah mendeteksi tangan pembuang sampah pada jarak < 15 cm.
-   * Mikrokontroler memutar Servo ke sudut 90° (tutup terbuka).
-   * Setelah tangan tidak terdeteksi selama jeda aman (misal 5 detik), servo kembali ke 0° (tutup tertutup).
-
-6. **Pengukuran Volume Sampah (Tombol Real-time / Selesai Pakai):**
-   * Sensor ultrasonik internal di bawah penutup memancarkan sinyal ke dasar tempat sampah.
-   * Rumus konversi kapasitas:
-     $$\text{Tinggi Total Tong} = H_{\text{total}} \text{ (misal 25 cm)}$$
-     $$\text{Jarak Terbaca Sensor} = D_{\text{ukur}} \text{ cm}$$
-     $$\text{Persentase Terisi} = \left( \frac{H_{\text{total}} - D_{\text{ukur}}}{H_{\text{total}} - D_{\text{minimal}}} \right) \times 100\%$$
-   * Nilai persentase dituliskan ke tabel status database untuk ditampilkan ke web dashboard.
-
-7. **Proses Kembali ke Stasiun Awal (Home Base):**
-   * Robot berputar atau melanjutkan lintasan loop mengikuti garis hingga mendeteksi marka hitam tebal `BASE-00`.
-   * Status sistem kembali ke `IDLE`.
-
----
-
-## 6. Matriks Pembagian Tugas Anggota Kelompok 1 (8 Mahasiswa)
-
-Untuk menjamin kelancaran pengerjaan proyek UAS IoT ini, tanggung jawab dibagi secara terstruktur:
-
-| No | Nama Mahasiswa | Bidang Tanggung Jawab | Rincian Tugas Spesifik |
+| No | Nama Mahasiswa | Peran Proyek | Rincian Tanggung Jawab Teknis |
 | :---: | :--- | :--- | :--- |
-| 1 | **Adam Rahmatulloh** | Project Leader & Hardware Lead | Koordinasi integrasi sistem, perakitan sasis/mekanik, wiring ESP32. |
-| 2 | **M Ilham Jazuli** | Frontend Developer | Perancangan antarmuka dashboard web, styling 3 tema warna user, integrasi API. |
-| 3 | **M Thoriq Dhiyaul Haq** | Backend & Database Engineer | Perancangan struktur database, manajemen antrean (queue logic), integrasi MQTT/HTTP. |
-| 4 | **M Anwar Ismail** | Navigation & Line Follower Firmware | Kalibrasi sensor IR 3-5 channel, algoritma kendali belok motor DC via L298N. |
-| 5 | **A Hisyammuddin** | Sensor & Actuator Firmware | Pemrograman sensor TCS3200 (kalibrasi warna), buka-tutup servo, obstacle FC-51. |
-| 6 | **A Shobrun Jamil** | Trash Volume Algorithm & Telemetry | Logika pengukuran HC-SR04 internal, konversi persentase volume sampah, data logging. |
-| 7 | **Ramzi Pandu Ma'arif** | Mekanik & Konstruksi Fisik | Pembuatan body tempat sampah (triplek/akrilik), mounting sensor, bracket servo. |
-| 8 | **M Jazaul Aufi** | Testing, Dokumentasi & Demo Prep | Uji coba lintasan, video demonstrasi, pembuatan slide presentasi dan laporan akhir. |
+| 1 | **Adam Rahmatulloh** | Project Leader & Hardware Assembly | Integrasi mekanik, sasis 4 roda, pengkabelan breadboard, dan jalur distribusi daya. |
+| 2 | **M Ilham Jazuli** | Frontend UI/UX Developer | Pembuatan dashboard web 3 User, 3 tombol kontrol utama, visualisasi bar volume sampah. |
+| 3 | **M Thoriq Dhiyaul Haq** | Backend & IoT Bridge Engineer | Setup broker MQTT / Database ringan, antrean panggilan FIFO, endpoint pemicu volume. |
+| 4 | **M Anwar Ismail** | Firmware: Line Follower & PID | Algoritma *Task Executor* di Core 1 ESP32, kalibrasi PID motor L298N saat belok. |
+| 5 | **A Hisyammuddin** | Firmware: Sensor Warna TCS3200 | Pemrograman pembacaan marka warna stasiun persimpangan, sinkronisasi dengan graf rute. |
+| 6 | **A Shobrun Jamil** | Firmware: Ultrasonik & Volume | Logika pengukuran volume sampah HC-SR04, mekanisme buka-tutup servo, dan *dwell timer*. |
+| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Pemasangan sensor anti-tabrak FC-51, fabrikasi wadah tempat sampah dan dudukan servo. |
+| 8 | **M Jazaul Aufi** | QA Tester, Demo Prep & Dokumen | Pengujian sistem di lintasan, dokumentasi video demonstrasi UAS, dan laporan akhir. |
 
 ---
 
-## 7. Kesimpulan & Langkah Kerja Segera
+## 8. Kesimpulan Akhir
 
-1. **Keputusan User:** Tim menyetujui implementasi **3 User** untuk memaksimalkan fungsi sensor TCS3200 dan mengoptimalkan beban kerja 8 anggota kelompok, dengan fleksibilitas sistem yang tetap bisa dijalankan pada mode 2 user jika ruang uji coba terbatas.
-2. **Dashboard Web:** Menyediakan tombol pemanggilan per-user beraksen warna masing-masing, tombol pemulangan robot ke base, serta tombol pemicu deteksi volume sampah real-time.
-3. **Langkah Kerja Berikutnya:**
-   * Finalisasi wiring diagram ESP32 dengan L298N, servo, dan sensor.
-   * Setup proyek database untuk listener antrean panggilan.
-   * Pembuatan prototipe antarmuka frontend HTML/CSS/JS.
+1. **Efisiensi Database:** Pemisahan subsistem navigasi (lokal di ESP32) dengan subsistem monitoring IoT berhasil membuat beban database sangat ringan (payload hanya berkisar 1 s.d. 4 byte per transaksi).
+2. **Kesesuaian 3 User:** Penerapan 3 User terbukti sangat ideal karena sejalan dengan model graf 4 node di `spec.md`, memaksimalkan fungsi sensor TCS3200, dan membagi porsi kerja 8 anggota secara adil.
+3. **Kesiapan Proyek:** Seluruh komponen telah lengkap dan terverifikasi. Tim dapat langsung melanjutkan tahap pengkabelan (*wiring*) dan pemrograman firmware sesuai diagram pinout yang telah ditetapkan.
