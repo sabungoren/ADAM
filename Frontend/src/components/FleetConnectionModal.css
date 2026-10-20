@@ -435,7 +435,7 @@
 }
 
 /* Mobile Responsive */
-@media (max-width: 680px) {
+@media (max-width: 768px) {
   .fleet-modal-card {
     padding: 16px;
     gap: 16px;
@@ -449,6 +449,18 @@
   .fleet-mode-grid {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  /* Pindahkan badge Dual Failover, HTTP REST API, dan MQTT over SSL ke baris berikutnya di mobile */
+  .fleet-mode-info-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fleet-protocol-pill {
+    align-self: flex-start;
+    margin-top: 2px;
   }
 
   .fleet-form-row {
@@ -473,3 +485,4 @@
     width: 100%;
   }
 }
+

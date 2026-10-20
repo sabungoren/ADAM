@@ -11,13 +11,10 @@ import {
   Sun,
   Moon,
   Globe,
-  Radio,
-  Trash2,
   LogIn,
   LogOut,
   Shield,
   User,
-  Lock,
   Menu,
   X,
   UserPlus,
@@ -233,16 +230,18 @@ export const Navbar: React.FC<NavbarProps> = ({ isOnline }) => {
             </div>
           )}
 
-          {/* Connection status badge */}
-          <div
-            className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
-            onClick={() => setIsFleetModalOpen(true)}
-            title="Klik untuk membuka Konfigurasi Wi-Fi & MQTT Armada"
-            id="navbar-fleet-status-badge"
-          >
-            <Wifi size={13} className="conn-icon" />
-            <span>{isOnline ? 'ARMADA WI-FI' : t('statusOffline')}</span>
-          </div>
+          {/* Connection status badge (Hanya tampil jika user sudah login) */}
+          {isAuthenticated && (
+            <div
+              className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
+              onClick={() => setIsFleetModalOpen(true)}
+              title={t('fleetTooltipNavbar')}
+              id="navbar-fleet-status-badge"
+            >
+              <Wifi size={13} className="conn-icon" />
+              <span>{isOnline ? t('fleetBadgeOnline') : t('statusOffline')}</span>
+            </div>
+          )}
 
           {/* Theme Toggle */}
           <button
@@ -374,17 +373,19 @@ export const Navbar: React.FC<NavbarProps> = ({ isOnline }) => {
 
             {/* Mobile Status & Lang Footer */}
             <div className="mobile-dropdown-footer">
-              <div
-                className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
-                onClick={() => {
-                  setIsMobileMenuOpen(false);
-                  setIsFleetModalOpen(true);
-                }}
-                id="mobile-fleet-status-badge"
-              >
-                <Wifi size={14} className="conn-icon" />
-                <span>{isOnline ? 'ARMADA WI-FI' : t('statusOffline')}</span>
-              </div>
+              {isAuthenticated && (
+                <div
+                  className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setIsFleetModalOpen(true);
+                  }}
+                  id="mobile-fleet-status-badge"
+                >
+                  <Wifi size={14} className="conn-icon" />
+                  <span>{isOnline ? t('fleetBadgeOnline') : t('statusOffline')}</span>
+                </div>
+              )}
 
               <button className="lang-pill-btn" onClick={toggleLanguage}>
                 <Globe size={16} />

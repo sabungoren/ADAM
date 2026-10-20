@@ -18,6 +18,7 @@ import {
   triggerRefreshGraphToRobot,
 } from '../services/fleetService';
 import { useAlert } from '../context/AlertContext';
+import { useLanguage } from '../context/LanguageContext';
 import './FleetConnectionModal.css';
 
 interface FleetConnectionModalProps {
@@ -30,6 +31,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
   onClose,
 }) => {
   const { toast } = useAlert();
+  const { t } = useLanguage();
   const [config, setConfig] = useState<FleetConfig>(getFleetConfig());
   const [isTestingPing, setIsTestingPing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -40,7 +42,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     saveFleetConfig(config);
-    toast.success('Pengaturan koneksi armada Wi-Fi berhasil disimpan!');
+    toast.success(t('fleetToastSaved'));
     onClose();
   };
 
@@ -58,7 +60,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
       setPingResult(result.message);
       toast.success(result.message);
     } catch {
-      toast.error('Gagal menghubungi armada.');
+      toast.error(t('fleetToastPingFailed'));
     } finally {
       setIsTestingPing(false);
     }
@@ -70,7 +72,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
       const res = await triggerRefreshGraphToRobot(config);
       toast.success(res.message);
     } catch {
-      toast.error('Gagal mengirimkan sinyal pembaruan graf ke armada.');
+      toast.error(t('fleetToastGraphFailed'));
     } finally {
       setIsRefreshing(false);
     }
@@ -92,17 +94,17 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
             </div>
             <div>
               <h2 id="fleet-modal-title" className="fleet-modal-title">
-                Koneksi Armada Robot ADAM (Wi-Fi &amp; Cloud)
+                {t('fleetModalTitle')}
               </h2>
               <p className="fleet-modal-subtitle">
-                Protokol komunikasi mikrokontroler ESP32 via Wi-Fi Lokal &amp; MQTT Cloud
+                {t('fleetModalSubtitle')}
               </p>
             </div>
           </div>
           <button
             className="fleet-close-btn"
             onClick={onClose}
-            aria-label="Tutup modal"
+            aria-label={t('fleetCloseModal')}
           >
             <X size={20} />
           </button>
@@ -111,24 +113,24 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
         {/* Live Status Summary Banner */}
         <div className="fleet-status-banner">
           <div className="fleet-status-item">
-            <span className="fleet-status-label">Status Wi-Fi Armada</span>
+            <span className="fleet-status-label">{t('fleetStatusWifiLabel')}</span>
             <div className="fleet-status-value">
               <div className="status-dot-active" />
-              <span className="mono">TERHUBUNG (ONLINE)</span>
+              <span className="mono">{t('fleetStatusConnected')}</span>
             </div>
           </div>
 
           <div className="fleet-status-item">
-            <span className="fleet-status-label">Latensi Sinyal (Ping)</span>
+            <span className="fleet-status-label">{t('fleetStatusLatencyLabel')}</span>
             <span className="fleet-status-value mono text-emerald">
               {config.pingMs ? `${config.pingMs} ms` : '24 ms'} &bull; RSSI -46 dBm
             </span>
           </div>
 
           <div className="fleet-status-item">
-            <span className="fleet-status-label">Target Firmware</span>
+            <span className="fleet-status-label">{t('fleetStatusTargetFirmwareLabel')}</span>
             <span className="fleet-status-value mono">
-              ESP32 FreeRTOS (Dual Core)
+              {t('fleetStatusTargetFirmwareVal')}
             </span>
           </div>
         </div>
@@ -139,7 +141,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
           <div className="fleet-form-group">
             <label className="fleet-label">
               <Radio size={16} />
-              <span>Metode Komunikasi Armada</span>
+              <span>{t('fleetCommMethodLabel')}</span>
             </label>
             <div className="fleet-mode-grid">
               <button
@@ -151,10 +153,10 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               >
                 <div className="fleet-mode-title">
                   <Zap size={16} />
-                  <span>Otomatis (Hybrid)</span>
+                  <span>{t('fleetModeAutoTitle')}</span>
                 </div>
                 <p className="fleet-mode-desc">
-                  Mencoba Wi-Fi Lokal langsung, fallback otomatis ke Supabase/MQTT
+                  {t('fleetModeAutoDesc')}
                 </p>
               </button>
 
@@ -169,10 +171,10 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               >
                 <div className="fleet-mode-title">
                   <Wifi size={16} />
-                  <span>Wi-Fi Langsung (LAN)</span>
+                  <span>{t('fleetModeDirectWifiTitle')}</span>
                 </div>
                 <p className="fleet-mode-desc">
-                  Koneksi HTTP REST langsung ke IP lokal ESP32 (misal di kelas)
+                  {t('fleetModeDirectWifiDesc')}
                 </p>
               </button>
 
@@ -187,10 +189,10 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               >
                 <div className="fleet-mode-title">
                   <Server size={16} />
-                  <span>Cloud Bridge (MQTT)</span>
+                  <span>{t('fleetModeCloudBridgeTitle')}</span>
                 </div>
                 <p className="fleet-mode-desc">
-                  Koneksi via broker EMQX Cloud &amp; Supabase Realtime channel
+                  {t('fleetModeCloudBridgeDesc')}
                 </p>
               </button>
             </div>
@@ -203,19 +205,19 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                 <div className="fleet-mode-info-header">
                   <span className="fleet-mode-info-title">
                     <Wifi size={16} />
-                    <span>Mode Wi-Fi Langsung (Local Peer-to-Peer / Hotspot)</span>
+                    <span>{t('fleetModeDirectWifiHeading')}</span>
                   </span>
-                  <span className="fleet-protocol-pill">HTTP REST API</span>
+                  <span className="fleet-protocol-pill">{t('fleetProtocolHttpRest')}</span>
                 </div>
                 <p className="fleet-mode-info-desc">
-                  Perintah dikirimkan langsung ke mikrokontroler ESP32 tanpa internet. Sangat cepat (&lt;25 ms), ideal untuk pengujian perakitan di lab/kelas atau saat laptop/HP terhubung ke Hotspot robot.
+                  {t('fleetModeDirectWifiExplanation')}
                 </p>
               </div>
 
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-ip" className="fleet-label">
-                    <span>Alamat IP Robot (ESP32)</span>
+                    <span>{t('fleetLabelRobotIp')}</span>
                   </label>
                   <input
                     id="fleet-ip"
@@ -229,13 +231,13 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                     required
                   />
                   <span className="fleet-help-text">
-                    IP mode Hotspot SoftAP bawaan ESP32: <code>192.168.4.1</code>
+                    {t('fleetHelpRobotIp')} <code>192.168.4.1</code>
                   </span>
                 </div>
 
                 <div className="fleet-form-group w-32">
                   <label htmlFor="fleet-port" className="fleet-label">
-                    <span>Port HTTP</span>
+                    <span>{t('fleetLabelHttpPort')}</span>
                   </label>
                   <input
                     id="fleet-port"
@@ -257,7 +259,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-ssid" className="fleet-label">
-                    <span>SSID Hotspot Robot</span>
+                    <span>{t('fleetLabelSsid')}</span>
                   </label>
                   <input
                     id="fleet-ssid"
@@ -273,7 +275,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-pass" className="fleet-label">
-                    <span>Password Wi-Fi Default</span>
+                    <span>{t('fleetLabelPassword')}</span>
                   </label>
                   <input
                     id="fleet-pass"
@@ -286,7 +288,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                     placeholder="adam12345"
                   />
                   <span className="fleet-help-text">
-                    Default firmware: <code>adam12345</code>
+                    {t('fleetHelpPassword')} <code>adam12345</code>
                   </span>
                 </div>
               </div>
@@ -300,19 +302,19 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                 <div className="fleet-mode-info-header">
                   <span className="fleet-mode-info-title">
                     <Server size={16} />
-                    <span>Mode Cloud Bridge (MQTT Broker &amp; Supabase Realtime)</span>
+                    <span>{t('fleetModeCloudBridgeHeading')}</span>
                   </span>
-                  <span className="fleet-protocol-pill">MQTT over SSL</span>
+                  <span className="fleet-protocol-pill">{t('fleetProtocolMqttSsl')}</span>
                 </div>
                 <p className="fleet-mode-info-desc">
-                  Armada robot dikendalikan secara nirkabel jarak jauh melalui Broker Cloud MQTT. Robot dapat berada di ruangan mana pun selama mikrokontroler ESP32 terhubung ke Wi-Fi dengan akses internet.
+                  {t('fleetModeCloudBridgeExplanation')}
                 </p>
               </div>
 
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-broker" className="fleet-label">
-                    <span>Broker MQTT Server</span>
+                    <span>{t('fleetLabelBroker')}</span>
                   </label>
                   <input
                     id="fleet-broker"
@@ -332,7 +334,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group w-32">
                   <label htmlFor="fleet-mqtt-port" className="fleet-label">
-                    <span>Port MQTT</span>
+                    <span>{t('fleetLabelMqttPort')}</span>
                   </label>
                   <input
                     id="fleet-mqtt-port"
@@ -353,7 +355,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-mqtt-moveto" className="fleet-label">
-                    <span>Topik MQTT Panggilan</span>
+                    <span>{t('fleetLabelMqttMoveto')}</span>
                   </label>
                   <input
                     id="fleet-mqtt-moveto"
@@ -370,7 +372,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-mqtt-refresh" className="fleet-label">
-                    <span>Topik Pembaruan Rute (Refresh Graph)</span>
+                    <span>{t('fleetLabelMqttRefresh')}</span>
                   </label>
                   <input
                     id="fleet-mqtt-refresh"
@@ -394,23 +396,23 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                 <div className="fleet-mode-info-header">
                   <span className="fleet-mode-info-title">
                     <Zap size={16} />
-                    <span>Mode Otomatis / Hybrid (Wi-Fi Cepat + Fallback Cloud)</span>
+                    <span>{t('fleetModeAutoHeading')}</span>
                   </span>
-                  <span className="fleet-protocol-pill">Dual Failover</span>
+                  <span className="fleet-protocol-pill">{t('fleetProtocolDualFailover')}</span>
                 </div>
                 <p className="fleet-mode-info-desc">
-                  Sistem cerdas mencoba memanggil armada melalui Wi-Fi Lokal terlebih dahulu (&lt;25 ms). Jika robot berada di luar jangkauan Wi-Fi lokal, sistem otomatis mengalihkan perintah ke Cloud MQTT &amp; Supabase Realtime!
+                  {t('fleetModeAutoExplanation')}
                 </p>
               </div>
 
               <div className="fleet-section-divider">
-                <span>Jalur 1: Wi-Fi Lokal Utama (Direct)</span>
+                <span>{t('fleetSectionPath1')}</span>
               </div>
 
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-ip-hybrid" className="fleet-label">
-                    <span>Alamat IP Robot</span>
+                    <span>{t('fleetLabelRobotIp')}</span>
                   </label>
                   <input
                     id="fleet-ip-hybrid"
@@ -427,7 +429,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group w-32">
                   <label htmlFor="fleet-port-hybrid" className="fleet-label">
-                    <span>Port HTTP</span>
+                    <span>{t('fleetLabelHttpPort')}</span>
                   </label>
                   <input
                     id="fleet-port-hybrid"
@@ -446,7 +448,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-ssid-hybrid" className="fleet-label">
-                    <span>SSID Wi-Fi</span>
+                    <span>{t('fleetLabelSsid')}</span>
                   </label>
                   <input
                     id="fleet-ssid-hybrid"
@@ -462,13 +464,13 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               </div>
 
               <div className="fleet-section-divider">
-                <span>Jalur 2: Cloud MQTT Cadangan (Internet Fallback)</span>
+                <span>{t('fleetSectionPath2')}</span>
               </div>
 
               <div className="fleet-form-row">
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-broker-hybrid" className="fleet-label">
-                    <span>Broker MQTT</span>
+                    <span>{t('fleetLabelBroker')}</span>
                   </label>
                   <input
                     id="fleet-broker-hybrid"
@@ -484,7 +486,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
 
                 <div className="fleet-form-group flex-1">
                   <label htmlFor="fleet-mqtt-moveto-hybrid" className="fleet-label">
-                    <span>Topik MQTT Panggilan</span>
+                    <span>{t('fleetLabelMqttMoveto')}</span>
                   </label>
                   <input
                     id="fleet-mqtt-moveto-hybrid"
@@ -524,12 +526,12 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               />
               <span>
                 {isTestingPing
-                  ? 'Menguji...'
+                  ? t('fleetBtnTesting')
                   : config.connectionMode === 'CLOUD_BRIDGE'
-                  ? 'Uji Koneksi Cloud Broker'
+                  ? t('fleetBtnTestCloud')
                   : config.connectionMode === 'DIRECT_WIFI'
-                  ? 'Uji Ping Wi-Fi Armada'
-                  : 'Uji Koneksi Armada'}
+                  ? t('fleetBtnTestWifi')
+                  : t('fleetBtnTestFleet')}
               </span>
             </button>
 
@@ -544,7 +546,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
                 size={16}
                 className={isRefreshing ? 'spin-animation' : ''}
               />
-              <span>Kirim Sinyal Rute ke RAM</span>
+              <span>{t('fleetBtnSendRoute')}</span>
             </button>
 
             <div className="flex-spacer" />
@@ -554,7 +556,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               className="fleet-btn fleet-btn-cancel"
               onClick={onClose}
             >
-              Tutup
+              {t('fleetBtnClose')}
             </button>
 
             <button
@@ -563,7 +565,7 @@ export const FleetConnectionModal: React.FC<FleetConnectionModalProps> = ({
               id="btn-fleet-save"
             >
               <CheckCircle2 size={16} />
-              <span>Simpan Pengaturan</span>
+              <span>{t('fleetBtnSave')}</span>
             </button>
           </div>
         </form>

@@ -1,13 +1,18 @@
 /**
  * ==========================================================================
- * SMART ADAM - PM2 ECOSYSTEM CONFIGURATION (Frontend/ecosystem.config.js)
+ * SMART ADAM - PM2 ECOSYSTEM CONFIGURATION (ES Module - ecosystem.config.js)
  * Dibuat khusus untuk STB (Armbian / Linux) + Cloudflare Tunnel
  * Domain: https://smartadam.jinwoostream.lol
  * Port: 5193
  * ==========================================================================
  */
 
-const path = require('path');
+import { execSync } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ecosystemConfig = {
   apps: [
@@ -32,8 +37,12 @@ const ecosystemConfig = {
 // ==========================================================================
 // AUTO-LAUNCH PM2 KETIKA DIJALANKAN DENGAN: node ecosystem.config.js
 // ==========================================================================
-if (require.main === module) {
-  const { execSync } = require('child_process');
+const isDirectRun = process.argv[1] && (
+  process.argv[1].endsWith('ecosystem.config.js') ||
+  process.argv[1].endsWith('ecosystem.config.cjs')
+);
+
+if (isDirectRun) {
   console.log('\n[SMART ADAM] ==============================================');
   console.log('[SMART ADAM] Menjalankan layanan SMART ADAM di PM2...');
   console.log('[SMART ADAM] Domain: https://smartadam.jinwoostream.lol');
@@ -42,9 +51,13 @@ if (require.main === module) {
 
   try {
     try {
-      execSync('pm2 start ecosystem.config.js', { stdio: 'inherit', cwd: __dirname });
+      execSync('pm2 start ecosystem.config.cjs', { stdio: 'inherit', cwd: __dirname });
     } catch {
-      execSync('npx pm2 start ecosystem.config.js', { stdio: 'inherit', cwd: __dirname });
+      try {
+        execSync('pm2 start ecosystem.config.js', { stdio: 'inherit', cwd: __dirname });
+      } catch {
+        execSync('npx pm2 start ecosystem.config.cjs', { stdio: 'inherit', cwd: __dirname });
+      }
     }
 
     console.log('\n[SMART ADAM] Berhasil aktif di PM2!');
@@ -55,4 +68,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = ecosystemConfig;
+export default ecosystemConfig;

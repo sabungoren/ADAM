@@ -1,13 +1,17 @@
 // ==========================================================================
 // SMART ADAM - PRODUCTION HTTP SERVER (Node.js Built-in, Zero Dependencies)
 // Dibuat khusus untuk deployment ke STB (Armbian / Linux) & Cloudflare Tunnel
+// ES Module Version (Cocok dengan "type": "module" di package.json)
 // ==========================================================================
 
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
-const tls = require('tls');
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import url, { fileURLToPath } from 'url';
+import tls from 'tls';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Sederhana load file .env tanpa dependency eksternal
 function loadEnvFile(envPath) {
@@ -33,7 +37,7 @@ function loadEnvFile(envPath) {
 const envVars = Object.assign(
   {},
   loadEnvFile(path.resolve(__dirname, '.env')),
-  loadEnvFile(path.resolve(__dirname, 'Frontend', '.env')),
+  loadEnvFile(path.resolve(__dirname, '..', '.env')),
   process.env
 );
 
@@ -262,9 +266,9 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`=======================================================`);
   console.log(`SMART ADAM Web Production Server Aktif`);
-  console.log(`URL Lokal:   http://${HOST}:${PORT}`);
+  console.log(`URL Lokal:     http://${HOST}:${PORT}`);
   console.log(`Domain Publik: https://smartadam.jinwoostream.lol`);
-  console.log(`Folder Dist: ${distDir}`);
+  console.log(`Folder Dist:   ${distDir}`);
   console.log(`Siap melayani request dari Nginx & Cloudflare Tunnel`);
   console.log(`=======================================================`);
 });
