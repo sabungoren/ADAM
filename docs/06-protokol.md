@@ -69,7 +69,7 @@ Server memvalidasi aturan graf (anti-simetris arah, maksimal satu edge per arah 
 | :--- | :--- | :--- |
 | `0x00` | `NONE` | Tidak ada error (*tidak di-publish*) |
 | `0x01` | `NO_PATH` | Tidak ada rute valid ke target (graf kosong/rusak, edge hilang) |
-| `0x02` | `LINE_LOST` | Ketiga sensor garis kosong > threshold (spec 7.2) |
+| `0x02` | `LINE_LOST` | Kelima sensor garis BFD-1000 kosong > threshold (spec 7.2) |
 | `0x03` | `NODE_TIMEOUT` | Tahap menuju node berikutnya tidak selesai dalam waktu batas (spec 7.2) |
 
 ### Contoh Byte di Broker

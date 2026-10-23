@@ -73,10 +73,11 @@ static uint32_t tcs_measure_pulse_low_us(void) {
 }
 
 esp_err_t sensors_init(void) {
-    // IR + FC-51 as plain inputs
+    // BFD-1000 line channels + Near, HC-SR04 echo and TCS3200 output as inputs
     const gpio_config_t input_cfg = {
-        .pin_bit_mask = (1ULL << SENSORS_PIN_IR_LEFT) | (1ULL << SENSORS_PIN_IR_MID) |
-                        (1ULL << SENSORS_PIN_IR_RIGHT) | (1ULL << SENSORS_PIN_FC51) |
+        .pin_bit_mask = (1ULL << SENSORS_PIN_LF_S1) | (1ULL << SENSORS_PIN_LF_S2) |
+                        (1ULL << SENSORS_PIN_LF_S3) | (1ULL << SENSORS_PIN_LF_S4) |
+                        (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_NEAR) |
                         (1ULL << SENSORS_PIN_US_ECHO) | (1ULL << SENSORS_PIN_TCS_OUT),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
@@ -116,14 +117,27 @@ esp_err_t sensors_init(void) {
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
 
-    ESP_LOGI(TAG, "Sensors ready: 3x IR, TCS3200, HC-SR04, FC-51, buzzer");
+    ESP_LOGI(TAG, "Sensors ready: BFD-1000 5x IR + Near, TCS3200, HC-SR04, buzzer");
     return ESP_OK;
 }
 
-void sensors_line_read(int* left, int* mid, int* right) {
-    *left = gpio_get_level((gpio_num_t)SENSORS_PIN_IR_LEFT);
-    *mid = gpio_get_level((gpio_num_t)SENSORS_PIN_IR_MID);
-    *right = gpio_get_level((gpio_num_t)SENSORS_PIN_IR_RIGHT);
+void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
+    static const gpio_num_t pins[SENSORS_LINE_COUNT] = {
+        (gpio_num_t)SENSORS_PIN_LF_S1,
+        (gpio_num_t)SENSORS_PIN_LF_S2,
+        (gpio_num_t)SENSORS_PIN_LF_S3,
+        (gpio_num_t)SENSORS_PIN_LF_S4,
+        (gpio_num_t)SENSORS_PIN_LF_S5,
+    };
+
+    for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
+        int level = gpio_get_level(pins[i]);
+#if SENSORS_LINE_ACTIVE_LOW
+        line[i] = (level == 0) ? 1 : 0;
+#else
+        line[i] = (level != 0) ? 1 : 0;
+#endif
+    }
 }
 
 // Detect a color marker on a node (spec 2.2). Red = S2 low/S3 low,
@@ -201,8 +215,8 @@ float sensors_ultrasonic_distance_cm(void) {
 }
 
 bool sensors_obstacle_detected(void) {
-    // FC-51 output: LOW = obstacle detected
-    return gpio_get_level((gpio_num_t)SENSORS_PIN_FC51) == 0;
+    // BFD-1000 Near output: LOW = obstacle detected
+    return gpio_get_level((gpio_num_t)SENSORS_PIN_NEAR) == 0;
 }
 
 uint8_t sensors_battery_percent(void) {

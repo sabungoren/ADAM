@@ -5,10 +5,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// 3-array IR line follower sensors
-#define SENSORS_PIN_IR_LEFT 34
-#define SENSORS_PIN_IR_MID 35
-#define SENSORS_PIN_IR_RIGHT 39
+// BFD-1000 5-channel IR line follower (S1 = leftmost, S5 = rightmost)
+#define SENSORS_PIN_LF_S1 34
+#define SENSORS_PIN_LF_S2 35
+#define SENSORS_PIN_LF_S3 39
+#define SENSORS_PIN_LF_S4 21
+#define SENSORS_PIN_LF_S5 22
+#define SENSORS_LINE_COUNT 5
+
+/* BFD-1000 digital line outputs are active-low: LOW when the sensor sees the
+ * black line, HIGH on the white background. Set to 0 for modules that output
+ * HIGH on black. */
+#define SENSORS_LINE_ACTIVE_LOW 1
+
+// BFD-1000 "Near" obstacle output (LOW = obstacle)
+#define SENSORS_PIN_NEAR 13
 
 // TCS3200 color sensor (node color marker detection - spec 2.2)
 #define SENSORS_PIN_TCS_S0 19
@@ -21,17 +32,14 @@
 #define SENSORS_PIN_US_TRIG 4
 #define SENSORS_PIN_US_ECHO 15
 
-// FC-51 obstacle sensor (safety brake, LOW = obstacle)
-#define SENSORS_PIN_FC51 13
-
 // Buzzer indicator + battery divider ADC
 #define SENSORS_PIN_BUZZER 2
 #define SENSORS_PIN_BATTERY_ADC 36 // GPIO36 = ADC1_CH0
 
 esp_err_t sensors_init(void);
 
-// Read the 3 IR sensors: 1 = line detected under that sensor
-void sensors_line_read(int* left, int* mid, int* right);
+// Read the 5 BFD-1000 channels, left to right (S1..S5): 1 = line detected
+void sensors_line_read(int line[SENSORS_LINE_COUNT]);
 
 /* Detect a bright color marker under the robot (= junction node, spec 2.2).
  * Measures the pulse width of every RGB channel and reports whether one
@@ -41,7 +49,7 @@ bool sensors_color_marker_present(void);
 // Ultrasonic distance in cm (timeout returns the maximum sensor range)
 float sensors_ultrasonic_distance_cm(void);
 
-// true when an obstacle is detected in front (FC-51 LOW)
+// true when an obstacle is detected in front (BFD-1000 Near LOW)
 bool sensors_obstacle_detected(void);
 
 // Battery level 0-100% from the voltage divider ADC

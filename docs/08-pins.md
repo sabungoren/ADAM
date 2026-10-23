@@ -19,15 +19,22 @@ Sumber kebenaran tabel ini adalah `#define` di `src/motor.h`, `src/sensors.h`, d
 
 PWM: frekuensi 1 kHz, resolusi 8-bit (duty 0–255), timer LEDC low-speed.
 
-## Sensor Garis (3× IR line sensor)
+## Sensor Garis BFD-1000 (5 channel + Near)
 
 | GPIO | Sinyal | Arah | Keterangan |
 | :--- | :--- | :--- | :--- |
-| 34 | IR LEFT | Input | Bit0 pola garis |
-| 35 | IR MID | Input | Bit1 pola garis |
-| 39 | IR RIGHT | Input | Bit2 pola garis |
+| 34 | S1 (paling kiri) | Input | Bit0 pola garis |
+| 35 | S2 | Input | Bit1 pola garis |
+| 39 | S3 (tengah) | Input | Bit2 pola garis |
+| 21 | S4 | Input | Bit3 pola garis |
+| 22 | S5 (paling kanan) | Input | Bit4 pola garis |
+| 13 | NEAR | Input | Sensor halangan depan BFD-1000, `LOW` = halangan (menggantikan FC-51) |
 
-> ⚠️ GPIO 34, 35, 39 adalah *input-only* pin dan **tidak punya pull internal** — konfigurasi `GPIO_PULLUP_ENABLE` di `sensors.c` tidak berpengaruh pada ketiganya; aktif/kedua level garisnya bergantung rangkaian pull-up eksternal modul.
+> ⚠️ **Polaritas:** output digital BFD-1000 aktif-*low* — `LOW` saat sensor melihat garis hitam, `HIGH` di latar putih. Firmware membalik level ini di `sensors.c`; jika modul yang dipakai aktif-*high*, ubah `SENSORS_LINE_ACTIVE_LOW` menjadi `0` di `sensors.h`.
+>
+> ⚠️ **Catu daya:** hubungkan `VCC` BFD-1000 ke **3.3 V**, bukan 5 V, karena output digital-nya mengikuti tegangan VCC dan GPIO ESP32 tidak toleran 5 V.
+>
+> ⚠️ GPIO 34, 35, 39 adalah *input-only* pin dan **tidak punya pull internal** — konfigurasi `GPIO_PULLUP_ENABLE` di `sensors.c` tidak berpengaruh pada ketiganya. GPIO 21/22 adalah input normal dengan pull-up internal, tetapi output BFD-1000 bersifat *push-pull* sehingga pull-up tidak diperlukan.
 
 ## Sensor Warna TCS3200
 
@@ -39,7 +46,7 @@ PWM: frekuensi 1 kHz, resolusi 8-bit (duty 0–255), timer LEDC low-speed.
 | 17 | S3 | Out | Pilih filter (R/G/B) |
 | 16 | OUT | Input | Keluaran frekuensi warna (pull-up enable) |
 
-## Ultrasonik HC-SR04 (pengaman halangan depan)
+## Ultrasonik HC-SR04 (interaksi pengguna saat dwell)
 
 | GPIO | Sinyal | Arah | Keterangan |
 | :--- | :--- | :--- | :--- |
@@ -50,7 +57,6 @@ PWM: frekuensi 1 kHz, resolusi 8-bit (duty 0–255), timer LEDC low-speed.
 
 | GPIO | Sinyal | Arah | Keterangan |
 | :--- | :--- | :--- | :--- |
-| 13 | FC-51 | Input | Pengereman halangan sementara (spec 7.3) |
 | 2 | BUZZER | Out | Buzzer navigasi (beep saat manuver, desah halangan) |
 | 23 | SERVO | PWM out | Servo tutup tempat sampah: 50 Hz, resolusi 14-bit, pulsa 500–2400 µs; terbuka 90°, tertutup 0° |
 | 36 | BAT ADC | ADC in | GPIO36 = ADC1_CH0, pembacaan tegangan baterai, pembacaan 0–4095 |

@@ -32,7 +32,7 @@ typedef enum {
     ADAM_STATUS_MOVING = 1,
     ADAM_STATUS_DWELL = 2,
     ADAM_STATUS_ERROR = 3,
-    // Internal only, never published: FC-51 obstacle brake (spec 7.3)
+    // Internal only, never published: BFD-1000 Near obstacle brake (spec 7.3)
     ADAM_STATUS_OBSTACLE = 4,
 } adam_status_t;
 

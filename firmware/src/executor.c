@@ -18,7 +18,7 @@
 static const char* TAG = "executor";
 
 /* Robot status wire codes (adam_status_t, docs/06-protokol.md):
- * IDLE/MOVING/DWELL/ERROR are published, OBSTACLE (FC-51 brake) is internal
+ * IDLE/MOVING/DWELL/ERROR are published, OBSTACLE (BFD-1000 Near brake) is internal
  * only and never published.
  * s_state below is the *scheduler* state (what the task loop does),
  * s_status is the published wire status. */
@@ -37,12 +37,13 @@ static volatile adam_status_t s_status = ADAM_STATUS_IDLE;
 #define PID_KD 18.0f
 #define PID_LOOP_MS 10 // 100 Hz control loop (spec 7.1)
 
-// Node detection: the 3-IR junction must be seen several times in a row
+// Node detection: the 5-IR junction must be seen several times in a row
 #define NODE_JUNCTION_RUNS 3
+#define LINE_PATTERN_ALL 0b11111
 // Navigation errors: line lost while MOVING (spec 7.2) and step timeout
 #define LINE_LOST_MS 500
 #define STEP_TIMEOUT_MS 30000
-// FC-51 obstacle brake: beep at most once per interval
+// BFD-1000 Near obstacle brake: beep at most once per interval
 #define OBSTACLE_BEEP_MS 300
 
 static nav_path_t s_nav;
@@ -149,23 +150,45 @@ static bool move_begin_step(void) {
     return true;
 }
 
-// Line pattern summary: bitmask of the 3 sensors (bit0 left, bit1 middle, bit2 right)
-static inline int line_pattern(int l, int m, int r) {
-    return (l & 1) | ((m & 1) << 1) | ((r & 1) << 2);
+// Line pattern summary: 5-bit mask of the BFD-1000 channels (bit0 = S1, bit4 = S5)
+static inline int line_pattern(const int line[SENSORS_LINE_COUNT]) {
+    int pattern = 0;
+    for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
+        pattern |= (line[i] & 1) << i;
+    }
+    return pattern;
+}
+
+// Line error -1..1 from the active sensor positions (-2..+2, normalized by 2)
+static float line_error(const int line[SENSORS_LINE_COUNT]) {
+    static const int weight[SENSORS_LINE_COUNT] = {-2, -1, 0, 1, 2};
+    int sum = 0;
+    int count = 0;
+
+    for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
+        if (line[i]) {
+            sum += weight[i];
+            count++;
+        }
+    }
+    if (count == 0) {
+        return s_last_error;
+    }
+    return ((float)sum / (float)count) / 2.0f;
 }
 
 // One MOVING iteration: PID, obstacle brake, node detection, LINE_LOST, timeout
 static void moving_tick(void) {
-    int l, m, r;
-    sensors_line_read(&l, &m, &r);
-    int pattern = line_pattern(l, m, r);
+    int line[SENSORS_LINE_COUNT];
+    sensors_line_read(line);
+    int pattern = line_pattern(line);
 
-    // FC-51 safety brake: stop on an obstacle, continue when the way is free
+    // BFD-1000 Near safety brake: stop on an obstacle, continue when the way is free
     if (sensors_obstacle_detected()) {
         motor_halt();
         if (!s_obstacle_latched) {
             s_obstacle_latched = true;
-            ESP_LOGW(TAG, "OBSTACLE (FC-51)! Motor stopped temporarily");
+            ESP_LOGW(TAG, "OBSTACLE (BFD-1000 Near)! Motor stopped temporarily");
         }
         if (now_ms() - s_last_obstacle_beep > OBSTACLE_BEEP_MS) {
             s_last_obstacle_beep = now_ms();
@@ -183,7 +206,7 @@ static void moving_tick(void) {
         if (s_no_line_since < 0) {
             s_no_line_since = now_ms();
         } else if (now_ms() - s_no_line_since > LINE_LOST_MS) {
-            ESP_LOGE(TAG, "Line lost (3 sensors blank > %d ms)", LINE_LOST_MS);
+            ESP_LOGE(TAG, "Line lost (5 sensors blank > %d ms)", LINE_LOST_MS);
             executor_set_error(ADAM_ERR_LINE_LOST);
             return;
         }
@@ -191,13 +214,8 @@ static void moving_tick(void) {
         s_no_line_since = -1;
     }
 
-    // PID line follower: line error -1..1 with differential steering
-    float error = 0.0f;
-    if ((pattern & 0b001) && !(pattern & 0b100)) {
-        error = -1.0f; // line under the left sensor
-    } else if ((pattern & 0b100) && !(pattern & 0b001)) {
-        error = 1.0f; // line under the right sensor
-    }
+    // PID line follower: weighted line error -1..1 with differential steering
+    float error = line_error(line);
 
     float p = PID_KP * error;
     float d = PID_KD * (error - s_last_error);
@@ -205,16 +223,16 @@ static void moving_tick(void) {
 
     motor_set_speed(PID_BASE_SPEED - (int)(p + d), PID_BASE_SPEED + (int)(p + d));
 
-    // Node arrival detection (spec 2.2): the 3 IR sensors see the line at the
-    // same time (Wokwi fallback), validated by the TCS3200 color marker.
+    // Node arrival detection (spec 2.2): all 5 BFD-1000 sensors see the line at
+    // the same time (junction), validated by the TCS3200 color marker.
     // After one arrival the junction has to leave the sensors first (s_wait_clear).
     bool node_detected = false;
 
-    if (s_wait_clear && pattern != 0b111) {
+    if (s_wait_clear && pattern != LINE_PATTERN_ALL) {
         s_wait_clear = false;
     }
 
-    if (!s_wait_clear && pattern == 0b111) {
+    if (!s_wait_clear && pattern == LINE_PATTERN_ALL) {
         if (s_junction_run == 0) {
             s_junction_valid = sensors_color_marker_present();
         }
@@ -222,7 +240,7 @@ static void moving_tick(void) {
         if (s_junction_run >= NODE_JUNCTION_RUNS) {
             node_detected = true;
         }
-    } else if (pattern != 0b111) {
+    } else if (pattern != LINE_PATTERN_ALL) {
         s_junction_run = 0;
         s_junction_valid = false;
     }
@@ -239,7 +257,7 @@ static void moving_tick(void) {
 
     // Valid node arrival
     motor_halt();
-    ESP_LOGI(TAG, "NODE DETECTED (marker: %s)", s_junction_valid ? "TCS3200 color" : "3-IR junction fallback");
+    ESP_LOGI(TAG, "NODE DETECTED (marker: %s)", s_junction_valid ? "TCS3200 color" : "5-IR junction fallback");
 
     size_t to = s_nav.path[s_step];
     s_junction_run = 0;

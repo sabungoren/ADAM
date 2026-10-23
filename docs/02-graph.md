@@ -45,5 +45,6 @@ Peta disimpan dalam bentuk **Matriks 1D Byte Array** berukuran `N x N` byte, di 
 Untuk membedakan antara jalur lurus biasa dan titik persimpangan/node:
 
 * Setiap titik persimpangan (*Node*) diberi **marka penanda warna khusus** (*Color Marker*) pada lintasan garis hitam.
-* Robot menggunakan **Sensor Warna / Color Sensor Module** yang dipasang bersamaan dengan array sensor *line-follower*.
-* Deteksi warna persimpangan akan memicu event `NODE_ARRIVED` pada *Task Executor* untuk mengeksekusi logika belokan/pemberhentian.
+* Robot menggunakan **Sensor Warna / Color Sensor Module** yang dipasang bersamaan dengan array sensor *line-follower* BFD-1000 (5 channel).
+* Persimpangan terdeteksi saat kelima channel BFD-1000 sama-sama melihat garis hitam (`0b11111`), lalu divalidasi oleh color marker.
+* Deteksi persimpangan yang tervalidasi akan memicu event `NODE_ARRIVED` pada *Task Executor* untuk mengeksekusi logika belokan/pemberhentian.

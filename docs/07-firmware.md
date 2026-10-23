@@ -47,5 +47,5 @@ Firmware dijalankan menggunakan Sistem Operasi Real-Time (**FreeRTOS**) pada mik
 
 ## 7.3 Catatan Perilaku Khusus Task Executor
 
-* **Pengereman halangan (`OBSTACLE`) bersifat internal**: sensor jarak menghentikan motor sementara, dan begitu jalan bebas robot melanjutkan rute — status jaringan tidak berubah (kode `OBSTACLE` tidak pernah di-publish).
+* **Pengereman halangan (`OBSTACLE`) bersifat internal**: sensor *Near* pada BFD-1000 menghentikan motor sementara, dan begitu jalan bebas robot melanjutkan rute — status jaringan tidak berubah (kode `OBSTACLE` tidak pernah di-publish).
 * **Anti false-arrival**: setelah tiba di satu node, persimpangan harus menghilang dari pandangan sensor sebelum node berikutnya boleh terdeteksi (mencegah deteksi dobel di node yang sama).
