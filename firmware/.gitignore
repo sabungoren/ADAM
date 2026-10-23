@@ -1,0 +1,11 @@
+.pio
+.clang_complete
+.gcc-flags.json
+.ccls
+compile_commands.json
+*.bin
+# the SvelteKit route that serves the graph binary is not a build artifact
+!frontend/src/routes/graph.bin/
+.envrc
+*.old
+.cache
