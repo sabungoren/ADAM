@@ -6,12 +6,10 @@
 #include <stdint.h>
 
 // BFD-1000 5-channel IR line follower (S1 = leftmost, S5 = rightmost)
-#define SENSORS_PIN_LF_S1 34
-#define SENSORS_PIN_LF_S2 35
-#define SENSORS_PIN_LF_S3 39
-#define SENSORS_PIN_LF_S4 21
-#define SENSORS_PIN_LF_S5 22
-#define SENSORS_LINE_COUNT 5
+#define SENSORS_PIN_LF_LEFT 39
+#define SENSORS_PIN_LF_MIDDLE 34
+#define SENSORS_PIN_LF_RIGHT 35
+#define SENSORS_LINE_COUNT 3
 
 /* BFD-1000 digital line outputs are active-low: LOW when the sensor sees the
  * black line, HIGH on the white background. Set to 0 for modules that output

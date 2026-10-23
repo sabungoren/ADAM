@@ -74,10 +74,10 @@ static uint32_t tcs_measure_pulse_low_us(void) {
 }
 
 esp_err_t sensors_init(void) {
-    // BFD-1000 line channels + hand IR, HC-SR04 echo and TCS3200 output as inputs
+    // BFD-1000 line channels (left=39, mid=34, right=35) + hand IR, HC-SR04 echo and TCS3200 output as inputs
     const gpio_config_t input_cfg = {
-        .pin_bit_mask = (1ULL << SENSORS_PIN_LF_S1) | (1ULL << SENSORS_PIN_LF_S2) | (1ULL << SENSORS_PIN_LF_S3) |
-                        (1ULL << SENSORS_PIN_LF_S4) | (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_HAND_IR) |
+        .pin_bit_mask = (1ULL << SENSORS_PIN_LF_LEFT) | (1ULL << SENSORS_PIN_LF_MIDDLE) |
+                        (1ULL << SENSORS_PIN_LF_RIGHT) | (1ULL << SENSORS_PIN_HAND_IR) |
                         (1ULL << SENSORS_PIN_US_ECHO) | (1ULL << SENSORS_PIN_TCS_OUT),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
@@ -120,9 +120,9 @@ esp_err_t sensors_init(void) {
 }
 
 void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
+    // Order: line[0]=left (GPIO39/S_LEFT), line[1]=mid (GPIO34/S_MIDDLE), line[2]=right (GPIO35/S_RIGHT)
     static const gpio_num_t pins[SENSORS_LINE_COUNT] = {
-        (gpio_num_t)SENSORS_PIN_LF_S1, (gpio_num_t)SENSORS_PIN_LF_S2, (gpio_num_t)SENSORS_PIN_LF_S3,
-        (gpio_num_t)SENSORS_PIN_LF_S4, (gpio_num_t)SENSORS_PIN_LF_S5,
+        (gpio_num_t)SENSORS_PIN_LF_LEFT, (gpio_num_t)SENSORS_PIN_LF_MIDDLE, (gpio_num_t)SENSORS_PIN_LF_RIGHT,
     };
 
     for (int i = 0; i < SENSORS_LINE_COUNT; i++) {

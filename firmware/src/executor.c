@@ -40,7 +40,7 @@ static volatile adam_status_t s_status = ADAM_STATUS_IDLE;
 
 // Node detection: the 5-IR junction must be seen several times in a row
 #define NODE_JUNCTION_RUNS 3
-#define LINE_PATTERN_ALL 0b11111
+#define LINE_PATTERN_ALL 0b111
 // Navigation errors: line lost while MOVING (spec 7.2) and step timeout
 #define LINE_LOST_MS 500
 #define STEP_TIMEOUT_MS 30000
@@ -147,7 +147,7 @@ static bool move_begin_step(void) {
     return true;
 }
 
-// Line pattern summary: 5-bit mask of the BFD-1000 channels (bit0 = S1, bit4 = S5)
+// Line pattern summary: 3-bit mask of the BFD-1000 channels (bit0=left, bit1=mid, bit2=right)
 static inline int line_pattern(const int line[SENSORS_LINE_COUNT]) {
     int pattern = 0;
     for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
@@ -158,7 +158,7 @@ static inline int line_pattern(const int line[SENSORS_LINE_COUNT]) {
 
 // Line error -1..1 from the active sensor positions (-2..+2, normalized by 2)
 static float line_error(const int line[SENSORS_LINE_COUNT]) {
-    static const int weight[SENSORS_LINE_COUNT] = {-2, -1, 0, 1, 2};
+    static const int weight[SENSORS_LINE_COUNT] = {-2, 0, 2};
     int sum = 0;
     int count = 0;
 
