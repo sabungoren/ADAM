@@ -50,6 +50,7 @@ Server memvalidasi aturan graf (anti-simetris arah, maksimal satu edge per arah 
 | `adam/srv/current_pos` | Robot → Server | 1 byte ASCII (`'A'`, `'B'`, ...) | 1 | **True** | Telemetri posisi node robot saat ini. |
 | `adam/srv/status` | Robot → Server | 1 byte kode status | 1 | **True** | Status operasional robot (tabel di bawah). |
 | `adam/srv/battery` | Robot → Server | 1 byte (`0`–`100`) | 1 | **True** | Persentase daya baterai; `100` maksimum. |
+| `adam/srv/trash` | Robot → Server | 1 byte (`0`–`100`) | 1 | **True** | Persentase kapasitas sampah terisi dari HC-SR04; `0` = kosong, `100` = penuh. |
 | `adam/srv/error` | Robot → Server | 1 byte kode error | 1 | False | Laporan alasan robot masuk state ERROR (tabel di bawah). |
 
 ### Kode `adam/srv/status`
@@ -61,7 +62,7 @@ Server memvalidasi aturan graf (anti-simetris arah, maksimal satu edge per arah 
 | `0x02` | `DWELL` | Berhenti di node tujuan (dwell, spesifikasi 4) |
 | `0x03` | `ERROR` | Berhenti, menunggu admin reset |
 
-> Kode `0x04` (`OBSTACLE`) ada di firmware tetap **internal only — tidak pernah di-publish**: pengereman halangan tidak mengubah status jaringan (lihat [docs/07-firmware.md](07-firmware.md)).
+> Kode `0x04` (`OBSTACLE`) **dicadangkan dan tidak pernah di-publish**. Sejak sensor *Near* BFD-1000 dilepas, firmware tidak lagi melakukan pengereman halangan; interaksi pengguna ditangani sensor IR tangan saat dwell (lihat [docs/07-firmware.md](07-firmware.md)).
 
 ### Kode `adam/srv/error`
 
@@ -79,6 +80,7 @@ srv/adam/moveto      payload 0x43          -> target node 'C'
 adam/srv/status      payload 0x02          -> DWELL
 adam/srv/error       payload 0x01          -> NO_PATH
 adam/srv/battery     payload 0x57          -> 87%
+adam/srv/trash       payload 0x23          -> kapasitas sampah 35%
 ```
 
 ### Referensi Implementasi

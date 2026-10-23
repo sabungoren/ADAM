@@ -20,8 +20,9 @@
 * **Inventaris Alat & Bahan Nyata (Tersedia):**
   - ESP32 Development Board
   - Breadboard & Kabel Jumper (Male-to-Male, Male-to-Female)
-  - Sensor Line Follower BFD-1000 (5 channel + sensor Near halangan)
-  - Sensor Ultrasonik HC-SR04 (Buka tutup otomatis & pengukur volume sampah internal)
+  - Sensor Line Follower BFD-1000 (5 channel)
+  - Sensor IR Tangan FC-51 (deteksi tangan di bukaan tempat sampah)
+  - Sensor Ultrasonik HC-SR04 (pengukur kapasitas sampah internal)
   - Motor DC Gearbox + Roda (4 set) + Driver Motor DC L298N
   - Sasis Robot 4 Roda
   - Servo Motor SG90 / MG995 (Mekanisme buka tutup bak)
@@ -169,14 +170,14 @@ Pusat kendali operasional pemanggilan dan pemantauan kondisi fisik robot secara 
 ```
 
 #### Rincian Fitur & Tombol Dashboard:
-1. **Top Telemetry Bar:** Status koneksi WebSocket, status state machine robot (`IDLE`, `MOVING`, `SERVING`, `OBSTACLE_STOP`), persentase baterai, dan persentase kapasitas sampah.
+1. **Top Telemetry Bar:** Status koneksi WebSocket, status state machine robot (`IDLE`, `MOVING`, `DWELL`, `ERROR`), persentase baterai, dan persentase kapasitas sampah.
 2. **Visualizer Peta Graf 2D:** Denah simpul lintasan interaktif. Posisi robot ditandai dengan avatar bergerak secara real-time. Node dapat diklik langsung untuk memanggil robot.
 3. **Dynamic Station Selector:** Tombol stasiun pemanggil terbuat secara otomatis dari daftar node graf yang aktif.
 4. **Tombol 1 &mdash; Panggil ADAM:** Mengirimkan perintah pemanggilan stasiun ke antrean.
 5. **Tombol 2 &mdash; Selesai & Pulang ke Home:** Menutup tempat sampah otomatis dan memulangkan robot ke stasiun parkir awal (Node A).
 6. **Tombol 3 &mdash; Deteksi Volume Sampah Real-Time:** 
    * **Definisi Fungsi:** Fitur ini **secara spesifik mengukur volume kepenuhan sampah di dalam tong sampah**.
-   * Ketika tombol ini ditekan, sistem mengirim sinyal pemicu ke sensor ultrasonik HC-SR04 yang terpasang di bawah tutup tong bagian dalam.
+   * Ketika tombol ini ditekan, sistem mengirim sinyal pemicu ke sensor ultrasonik HC-SR04 yang terpasang di bagian atas tetap wadah sampah (bukan pada tutup yang bergerak).
    * Sensor mengukur jarak sisa ke tumpukan sampah, lalu mengonversi nilai tersebut menjadi persentase kapasitas terisi (0% s.d. 100%) dan langsung memperbarui bilah progres kapasitas di dashboard:
      * **0% &ndash; 50% (Hijau):** Kapasitas aman / masih lapang.
      * **51% &ndash; 80% (Kuning):** Kapasitas mendekati penuh.
@@ -193,7 +194,7 @@ Halaman khusus konfigurasi lintasan untuk memenuhi kebutuhan penyesuaian rute ta
 Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di hadapan dosen:
 * **Tabel Riwayat Panggilan:** Log stasiun pemanggil, waktu request, durasi pelayanan, dan status eksekusi.
 * **Grafik Tren Volume Sampah:** Grafik garis riwayat akumulasi pembuangan sampah berdasarkan waktu.
-* **Log Keamanan (Safety Logs):** Rekaman insiden ketika sensor Near BFD-1000 mendeteksi objek atau rem mendadak di lintasan.
+* **Log Interaksi & Kapasitas:** Rekaman aktivitas pembuangan sampah (sensor IR tangan) dan riwayat kenaikan kapasitas wadah dari HC-SR04.
 
 ---
 
@@ -212,9 +213,9 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
    ├── Hitung Dijkstra secara lokal (Core 0 FreeRTOS)
    ├── Task Executor Loop 100 Hz telusuri garis via L298N (Core 1)
    ├── Sensor TCS3200 baca marka node di persimpangan
-   ├── Sensor Near BFD-1000 rem seketika jika ada halangan fisik
-   ├── HC-SR04 luar buka tutup servo saat tangan mendekat
-   └── HC-SR04 dalam ukur persentase volume sampah & kirim telemetri balik
+   ├── Sensor IR tangan FC-51 reset dwell timer saat tangan di bukaan
+   ├── Servo buka/tutup tutup sampah otomatis saat tiba & timer habis
+   └── HC-SR04 ukur persentase kapasitas sampah & kirim telemetri balik
 ```
 
 ---
@@ -232,18 +233,20 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
 | | S3 (tengah) | `GPIO 39` (VN) | Input Digital | Pemandu garis tengah (*track keeper*, bit 2 pola) |
 | | S4 | `GPIO 21` | Input Digital | Deteksi garis kanan (bit 3 pola) |
 | | S5 (paling kanan) | `GPIO 22` | Input Digital | Deteksi garis sisi kanan (bit 4 pola) |
-| | Near (halangan) | `GPIO 13` | Input Digital | Rem darurat anti-tabrak (`LOW` = Stop), menggantikan FC-51 |
+| **Sensor IR Tangan FC-51** | OUT (bukaan sampah) | `GPIO 13` | Input Digital | Deteksi tangan pengguna (`LOW` = ada tangan), reset dwell timer |
 | **Sensor Warna TCS3200** | S0, S1 (Frekuensi) | `GPIO 19`, `GPIO 18` | Output Digital | Pengatur skala frekuensi sensor |
 | | S2, S3 (Filter) | `GPIO 5`, `GPIO 17` | Output Digital | Seleksi filter warna pembacaan |
 | | OUT (Output Pulsa) | `GPIO 16` | Input (Interrupt) | Deteksi marka warna persimpangan node |
 | **Sensor Ultrasonik HC-SR04** | Trig Pin | `GPIO 4` | Output Digital | Memicu pulsa 10 µs ultrasonik |
-| | Echo Pin | `GPIO 15` | Input (*Divider*) | Pembacaan jarak sampah / tangan (via divider 1k & 2k) |
+| | Echo Pin | `GPIO 15` | Input (*Divider*) | Pembacaan jarak ke permukaan sampah (via divider 1k & 2k) |
 | **Servo Motor** | Signal PWM | `GPIO 23` | Output (LEDC) | Kendali buka (90°) dan tutup (0°) bak |
 | **Buzzer** | Positif Buzzer | `GPIO 2` | Output Digital | Indikator suara kedatangan / peringatan |
 
 > **Pedoman Catu Daya:** Driver L298N dan Motor DC ditenagai langsung dari baterai Li-ion 2S (7.4V). Pin `VIN` ESP32 ditenagai dari regulator 5V L298N / step-down. **Seluruh jalur Ground (GND) wajib dihubungkan bersama (*Common Ground*).**
 >
-> **Catatan BFD-1000:** Hubungkan `VCC` modul ke **3.3 V** agar output digital S1–S5 dan Near aman untuk GPIO ESP32. Output garis bersifat aktif-*low* (`LOW` = garis hitam); logika ini dibalik di firmware melalui `SENSORS_LINE_ACTIVE_LOW`.
+> **Catatan BFD-1000:** Hubungkan `VCC` modul ke **3.3 V** agar output digital S1–S5 aman untuk GPIO ESP32. Output garis bersifat aktif-*low* (`LOW` = garis hitam); logika ini dibalik di firmware melalui `SENSORS_LINE_ACTIVE_LOW`.
+>
+> **Catatan FC-51:** Sensor IR tangan dipasang dekat bukaan tempat sampah, bukan di bawah robot. Output aktif-*low* (`LOW` = tangan terdeteksi) dan tidak memerlukan divider karena modul dapat diberi VCC 3.3 V.
 
 ---
 
@@ -257,7 +260,7 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
 | 4 | **M Anwar Ismail** | Firmware: Line Follower & Motor | Pemrograman PID kendali garis di Core 1 FreeRTOS, kalibrasi manuver belok 90° via L298N. |
 | 5 | **A Hisyammuddin** | Firmware: Sensor TCS3200 Node Marker | Pemrograman deteksi marka warna pita persimpangan node, validasi event `NODE_ARRIVED`. |
 | 6 | **A Shobrun Jamil** | Firmware: Ultrasonik & Volume Sampah | Logika pengukuran kapasitas sampah internal, mekanisme buka-tutup servo dan *dwell timer*. |
-| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Integrasi sensor Near BFD-1000 anti-tabrak di depan robot, fabrikasi bak sampah dan dudukan servo. |
+| 7 | **Ramzi Pandu Ma'arif** | Interaksi & Mekanik Tong | Integrasi sensor IR tangan FC-51 di bukaan tempat sampah, fabrikasi bak sampah dan dudukan servo. |
 | 8 | **M Jazaul Aufi** | QA Tester, Demo Prep & Dokumen | Pengujian integrasi jalur di lantai, rekaman video demonstrasi UAS, dan laporan akhir. |
 
 ---

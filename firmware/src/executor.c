@@ -18,8 +18,8 @@
 static const char* TAG = "executor";
 
 /* Robot status wire codes (adam_status_t, docs/06-protokol.md):
- * IDLE/MOVING/DWELL/ERROR are published, OBSTACLE (BFD-1000 Near brake) is internal
- * only and never published.
+ * IDLE/MOVING/DWELL/ERROR are published. OBSTACLE is reserved and no longer
+ * emitted now that the BFD-1000 Near brake has been removed.
  * s_state below is the *scheduler* state (what the task loop does),
  * s_status is the published wire status. */
 typedef enum {
@@ -43,8 +43,6 @@ static volatile adam_status_t s_status = ADAM_STATUS_IDLE;
 // Navigation errors: line lost while MOVING (spec 7.2) and step timeout
 #define LINE_LOST_MS 500
 #define STEP_TIMEOUT_MS 30000
-// BFD-1000 Near obstacle brake: beep at most once per interval
-#define OBSTACLE_BEEP_MS 300
 
 static nav_path_t s_nav;
 static size_t s_step = 0;
@@ -62,8 +60,6 @@ static inline int64_t now_ms(void) {
 
 static int64_t s_step_deadline = 0;
 static int64_t s_no_line_since = -1;
-static int64_t s_last_obstacle_beep = 0;
-static bool s_obstacle_latched = false;
 // Anti false-arrival latch: after an arrival the junction has to leave the
 // sensor view before the next node may be detected
 static bool s_wait_clear = false;
@@ -177,29 +173,11 @@ static float line_error(const int line[SENSORS_LINE_COUNT]) {
     return ((float)sum / (float)count) / 2.0f;
 }
 
-// One MOVING iteration: PID, obstacle brake, node detection, LINE_LOST, timeout
+// One MOVING iteration: PID, node detection, LINE_LOST, timeout
 static void moving_tick(void) {
     int line[SENSORS_LINE_COUNT];
     sensors_line_read(line);
     int pattern = line_pattern(line);
-
-    // BFD-1000 Near safety brake: stop on an obstacle, continue when the way is free
-    if (sensors_obstacle_detected()) {
-        motor_halt();
-        if (!s_obstacle_latched) {
-            s_obstacle_latched = true;
-            ESP_LOGW(TAG, "OBSTACLE (BFD-1000 Near)! Motor stopped temporarily");
-        }
-        if (now_ms() - s_last_obstacle_beep > OBSTACLE_BEEP_MS) {
-            s_last_obstacle_beep = now_ms();
-            sensors_buzzer_beep(60);
-        }
-        return;
-    }
-    if (s_obstacle_latched) {
-        s_obstacle_latched = false;
-        ESP_LOGW(TAG, "No obstacle anymore, resuming navigation");
-    }
 
     // LINE_LOST (spec 7.2): no sensor sees the line
     if (pattern == 0) {

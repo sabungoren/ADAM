@@ -7,7 +7,7 @@
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "sensors.h"
-#include <math.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,10 +23,8 @@ static const char* TAG = "dwell";
 #define DWELL_SERVO_LEDC_TIMER LEDC_TIMER_1
 #define DWELL_SERVO_LEDC_CHANNEL LEDC_CHANNEL_2
 
-// Reset the dwell timer when the ultrasonic distance changes by more than 3 cm (user activity)
-#define DWELL_INTERACT_DELTA_CM 3.0f
-// Sampling period of the ultrasonic distance during the dwell
-#define DWELL_SAMPLE_MS 500
+// Sampling period of the hand IR sensor during the dwell
+#define DWELL_SAMPLE_MS 200
 
 // Monotonic time in milliseconds
 static inline int64_t dwell_now_ms(void) {
@@ -87,18 +85,21 @@ void dwell_run(void) {
     sensors_buzzer_beep(80);
 
     int64_t dwell_start = dwell_now_ms();
-    float prev_dist = sensors_ultrasonic_distance_cm();
+    bool hand_was_present = false;
 
-    // Dwell loop: 15 second timer, reset on user activity (spec 4)
+    // Dwell loop: 15 second timer, reset while the hand IR sees a hand (spec 4)
     while (dwell_now_ms() - dwell_start < DWELL_TIME_MS) {
-        float curr_dist = sensors_ultrasonic_distance_cm();
-        float delta = fabsf(curr_dist - prev_dist);
+        bool hand_present = sensors_hand_detected();
 
-        if (delta > DWELL_INTERACT_DELTA_CM) {
+        if (hand_present) {
             dwell_start = dwell_now_ms();
-            ESP_LOGI(TAG, "User activity detected (delta %.1f cm), dwell timer extended", (double)delta);
+            if (!hand_was_present) {
+                ESP_LOGI(TAG, "Hand detected at the trash opening, dwell timer extended");
+            }
+        } else if (hand_was_present) {
+            ESP_LOGI(TAG, "Hand removed, dwell timer continues");
         }
-        prev_dist = curr_dist;
+        hand_was_present = hand_present;
 
         vTaskDelay(pdMS_TO_TICKS(DWELL_SAMPLE_MS));
     }

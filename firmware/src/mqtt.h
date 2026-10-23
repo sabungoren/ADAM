@@ -19,6 +19,7 @@
 #define MQTT_CURRENT_POS_TOPIC "adam/srv/current_pos" // 1 byte ASCII 'A'..
 #define MQTT_STATUS_TOPIC "adam/srv/status"           // 1 byte adam_status_t
 #define MQTT_BATTERY_TOPIC "adam/srv/battery"         // 1 byte 0..100
+#define MQTT_TRASH_TOPIC "adam/srv/trash"             // 1 byte 0..100 (100 = full)
 #define MQTT_ERROR_TOPIC "adam/srv/error"             // 1 byte adam_error_t, no retain
 
 /* Wire enums (docs/06-protokol.md). Payloads are raw 1-byte enums, never
@@ -32,7 +33,7 @@ typedef enum {
     ADAM_STATUS_MOVING = 1,
     ADAM_STATUS_DWELL = 2,
     ADAM_STATUS_ERROR = 3,
-    // Internal only, never published: BFD-1000 Near obstacle brake (spec 7.3)
+    // Reserved: was the internal BFD-1000 Near brake, no longer emitted
     ADAM_STATUS_OBSTACLE = 4,
 } adam_status_t;
 

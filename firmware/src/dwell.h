@@ -13,7 +13,7 @@ esp_err_t dwell_init(void);
 
 /* Dwell procedure on the target node (spec 4, blocking):
  * 1) open the lid with the servo, 2) run the dwell timer and reset it
- * whenever user activity is detected (ultrasonic delta > 3 cm),
+ * while the hand IR sensor at the trash opening detects a hand,
  * 3) close the lid again.
  * Called from Task Executor while the robot is standing on the node. */
 void dwell_run(void);

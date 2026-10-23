@@ -73,11 +73,11 @@ static uint32_t tcs_measure_pulse_low_us(void) {
 }
 
 esp_err_t sensors_init(void) {
-    // BFD-1000 line channels + Near, HC-SR04 echo and TCS3200 output as inputs
+    // BFD-1000 line channels + hand IR, HC-SR04 echo and TCS3200 output as inputs
     const gpio_config_t input_cfg = {
         .pin_bit_mask = (1ULL << SENSORS_PIN_LF_S1) | (1ULL << SENSORS_PIN_LF_S2) |
                         (1ULL << SENSORS_PIN_LF_S3) | (1ULL << SENSORS_PIN_LF_S4) |
-                        (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_NEAR) |
+                        (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_HAND_IR) |
                         (1ULL << SENSORS_PIN_US_ECHO) | (1ULL << SENSORS_PIN_TCS_OUT),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
@@ -117,7 +117,7 @@ esp_err_t sensors_init(void) {
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
 
-    ESP_LOGI(TAG, "Sensors ready: BFD-1000 5x IR + Near, TCS3200, HC-SR04, buzzer");
+    ESP_LOGI(TAG, "Sensors ready: BFD-1000 5x IR, hand IR, TCS3200, HC-SR04, buzzer");
     return ESP_OK;
 }
 
@@ -214,9 +214,26 @@ float sensors_ultrasonic_distance_cm(void) {
     return cm;
 }
 
-bool sensors_obstacle_detected(void) {
-    // BFD-1000 Near output: LOW = obstacle detected
-    return gpio_get_level((gpio_num_t)SENSORS_PIN_NEAR) == 0;
+uint8_t sensors_trash_level_percent(void) {
+    float cm = sensors_ultrasonic_distance_cm();
+    float span = SENSORS_TRASH_EMPTY_CM - SENSORS_TRASH_FULL_CM;
+    if (span <= 0.0f) {
+        return 0;
+    }
+
+    float level = (SENSORS_TRASH_EMPTY_CM - cm) / span * 100.0f;
+    if (level < 0.0f) {
+        return 0;
+    }
+    if (level > 100.0f) {
+        return 100;
+    }
+    return (uint8_t)(level + 0.5f);
+}
+
+bool sensors_hand_detected(void) {
+    // FC-51 hand sensor output: LOW = hand/object detected
+    return gpio_get_level((gpio_num_t)SENSORS_PIN_HAND_IR) == 0;
 }
 
 uint8_t sensors_battery_percent(void) {
