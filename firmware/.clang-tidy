@@ -20,6 +20,7 @@ Checks: >-
   -readability-isolate-declaration,
   -readability-redundant-control-flow,
   -readability-simplify-boolean-expr,
+  -readability-uppercase-literal-suffix,
   -readability-inconsistent-declaration-parameter-name,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-avoid-non-const-global-variables,

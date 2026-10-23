@@ -1,10 +1,12 @@
 #include "executor.h"
 
+#include "dwell.h"
+#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
-#include "dwell.h"
+#include "freertos/task.h"
 #include "graph.h"
 #include "motor.h"
 #include "mqtt.h"
@@ -13,7 +15,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 static const char* TAG = "executor";
 

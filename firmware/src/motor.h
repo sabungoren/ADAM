@@ -2,7 +2,6 @@
 #define SRC_MOTOR_H
 
 #include "esp_err.h"
-#include "graph.h"
 #include <stdint.h>
 
 // L298N motor driver pins (table 7 of the analysis)

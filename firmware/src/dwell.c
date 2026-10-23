@@ -2,13 +2,16 @@
 
 #include "driver/ledc.h"
 #include "esp_check.h"
+#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "freertos/idf_additions.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/projdefs.h"
+#include "freertos/task.h"
+#include "hal/ledc_types.h"
 #include "sensors.h"
+#include "soc/clk_tree_defs.h"
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 static const char* TAG = "dwell";

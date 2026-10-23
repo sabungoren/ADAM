@@ -4,7 +4,6 @@
 #include "esp_err.h"
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 // Maximum node count per navigation path (size of the path queue item).
 // The dummy graph and the server example use 19 nodes, 32 is the special case.

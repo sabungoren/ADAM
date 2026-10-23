@@ -1,6 +1,5 @@
-#include "esp_err.h"
-#include "freertos/FreeRTOS.h"
 #include "graph.h"
+#include "esp_err.h"
 #include "portmacro.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,11 +21,11 @@ esp_err_t graph_update(const uint8_t* data, size_t count) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t* copy = malloc((size_t)count * count);
+    uint8_t* copy = malloc(count * count);
     if (copy == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    memcpy(copy, data, (size_t)count * count);
+    memcpy(copy, data, count * count);
 
     portENTER_CRITICAL(&s_matrix_lock);
     uint8_t* expired = s_matrix_retired;

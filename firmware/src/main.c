@@ -1,13 +1,11 @@
+#include "dwell.h"
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_idf_version.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_system.h"
-#include "dwell.h"
 #include "executor.h"
-#include "freertos/event_groups.h"
-#include "freertos/task.h"
 #include "graph_fetch.h"
 #include "motor.h"
 #include "mqtt.h"
@@ -17,7 +15,6 @@
 #include "sensors.h"
 #include "wifi.h"
 #include <inttypes.h>
-#include <stdint.h>
 
 static const char* TAG = "main";
 
@@ -62,7 +59,8 @@ void app_main() {
 #else
 // Motor demo mode: L298N only, no WiFi/MQTT/sensors/navigation
 // Sequence: forward -> coast -> backward -> coast -> left -> right -> stop
-#include "freertos/FreeRTOS.h"
+#    include "freertos/FreeRTOS.h"
+#    include "freertos/task.h"
 
 void app_main() {
     ESP_LOGI(TAG, "=== ADAM MOTOR DEMO ===");

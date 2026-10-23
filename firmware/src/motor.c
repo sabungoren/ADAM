@@ -3,10 +3,18 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_check.h"
+#include "esp_err.h"
 #include "esp_log.h"
-#include "freertos/idf_additions.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/projdefs.h"
+#include "freertos/task.h"
+#include "graph.h"
+#include "hal/gpio_types.h"
+#include "hal/ledc_types.h"
+#include "soc/clk_tree_defs.h"
+#include "soc/gpio_num.h"
 #include <stddef.h>
+#include <stdint.h>
 
 static const char* TAG = "motor";
 

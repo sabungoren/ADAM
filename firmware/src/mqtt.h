@@ -3,7 +3,6 @@
 
 #include "esp_err.h"
 #include <stdbool.h>
-#include <stdint.h>
 
 // MQTT config, currently just hardcoded for ease to use
 #define MQTT_BROKER_URI "mqtts://s997b122.ala.us-east-1.emqxsl.com:8883"

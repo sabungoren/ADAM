@@ -7,8 +7,9 @@
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
-#include "freertos/idf_additions.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/projdefs.h"
+#include "freertos/task.h"
 #include "hal/adc_types.h"
 #include "hal/gpio_types.h"
 #include "soc/gpio_num.h"
@@ -75,9 +76,8 @@ static uint32_t tcs_measure_pulse_low_us(void) {
 esp_err_t sensors_init(void) {
     // BFD-1000 line channels + hand IR, HC-SR04 echo and TCS3200 output as inputs
     const gpio_config_t input_cfg = {
-        .pin_bit_mask = (1ULL << SENSORS_PIN_LF_S1) | (1ULL << SENSORS_PIN_LF_S2) |
-                        (1ULL << SENSORS_PIN_LF_S3) | (1ULL << SENSORS_PIN_LF_S4) |
-                        (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_HAND_IR) |
+        .pin_bit_mask = (1ULL << SENSORS_PIN_LF_S1) | (1ULL << SENSORS_PIN_LF_S2) | (1ULL << SENSORS_PIN_LF_S3) |
+                        (1ULL << SENSORS_PIN_LF_S4) | (1ULL << SENSORS_PIN_LF_S5) | (1ULL << SENSORS_PIN_HAND_IR) |
                         (1ULL << SENSORS_PIN_US_ECHO) | (1ULL << SENSORS_PIN_TCS_OUT),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
@@ -87,9 +87,8 @@ esp_err_t sensors_init(void) {
     ESP_RETURN_ON_ERROR(gpio_config(&input_cfg), TAG, "input gpio failed");
 
     const gpio_config_t output_cfg = {
-        .pin_bit_mask = (1ULL << SENSORS_PIN_TCS_S0) | (1ULL << SENSORS_PIN_TCS_S1) |
-                        (1ULL << SENSORS_PIN_TCS_S2) | (1ULL << SENSORS_PIN_TCS_S3) |
-                        (1ULL << SENSORS_PIN_US_TRIG) | (1ULL << SENSORS_PIN_BUZZER),
+        .pin_bit_mask = (1ULL << SENSORS_PIN_TCS_S0) | (1ULL << SENSORS_PIN_TCS_S1) | (1ULL << SENSORS_PIN_TCS_S2) |
+                        (1ULL << SENSORS_PIN_TCS_S3) | (1ULL << SENSORS_PIN_US_TRIG) | (1ULL << SENSORS_PIN_BUZZER),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -111,8 +110,7 @@ esp_err_t sensors_init(void) {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
-    ESP_RETURN_ON_ERROR(
-        adc_oneshot_config_channel(s_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "adc channel failed");
+    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "adc channel failed");
 
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
@@ -123,11 +121,8 @@ esp_err_t sensors_init(void) {
 
 void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
     static const gpio_num_t pins[SENSORS_LINE_COUNT] = {
-        (gpio_num_t)SENSORS_PIN_LF_S1,
-        (gpio_num_t)SENSORS_PIN_LF_S2,
-        (gpio_num_t)SENSORS_PIN_LF_S3,
-        (gpio_num_t)SENSORS_PIN_LF_S4,
-        (gpio_num_t)SENSORS_PIN_LF_S5,
+        (gpio_num_t)SENSORS_PIN_LF_S1, (gpio_num_t)SENSORS_PIN_LF_S2, (gpio_num_t)SENSORS_PIN_LF_S3,
+        (gpio_num_t)SENSORS_PIN_LF_S4, (gpio_num_t)SENSORS_PIN_LF_S5,
     };
 
     for (int i = 0; i < SENSORS_LINE_COUNT; i++) {

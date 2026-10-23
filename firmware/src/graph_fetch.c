@@ -2,19 +2,21 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "graph.h"
 #include "portmacro.h"
 #include "sdkconfig.h"
 #include "wifi.h"
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 #include <strings.h>
 
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-#include "esp_crt_bundle.h"
+#    include "esp_crt_bundle.h"
 #endif
 
 static const char* TAG = "graph_fetch";
@@ -109,7 +111,7 @@ static void fetch_and_apply(void) {
     int read_len;
     while (total < (int)len && (read_len = esp_http_client_read(client, (char*)(buf + total), (int)len - total)) > 0) {
         total += read_len;
-        taskYIELD();  // cegah IDLE0 kelaparan CPU saat read beruntun
+        taskYIELD(); // cegah IDLE0 kelaparan CPU saat read beruntun
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);

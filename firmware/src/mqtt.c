@@ -4,10 +4,11 @@
 #include "esp_err.h"
 #include "esp_event_base.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "executor.h"
 #include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "graph_fetch.h"
 #include "mqtt_cert.h"
 #include "mqtt_client.h"
@@ -16,11 +17,8 @@
 #include "sensors.h"
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
-#include <sys/param.h>
 
 static const char* TAG = "mqtt";
 
@@ -155,9 +153,9 @@ esp_err_t mqtt_app_start(void) {
                 .disable_clean_session = true,
             },
         .task =
-        {
-            .priority = 2,
-        },
+            {
+                .priority = 2,
+            },
     };
 
     s_job_queue = xQueueCreate(10, sizeof(mqtt_job_t));

@@ -13,10 +13,9 @@
 #include "esp_wifi_types_generic.h"
 #include "freertos/event_groups.h"
 #include "freertos/projdefs.h"
-#include "freertos/task.h"
-#include <stdint.h>
-
 #include "portmacro.h"
+#include <stddef.h>
+#include <stdint.h>
 
 #define WIFI_STA_MAXIMUM_RETRY 3
 #define WIFI_RECONNECT_DELAY_US (10 * 1000 * 1000)
