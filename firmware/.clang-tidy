@@ -1,0 +1,45 @@
+# Clang-Tidy configuration for ESP32/ESP-IDF C project
+# Optimized to reduce noise while maintaining code quality
+
+Checks: >-
+  -*,
+  bugprone-*,
+  cert-*,
+  performance-*,
+  readability-*,
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  -readability-else-after-return,
+  -readability-magic-numbers,
+  -readability-braces-around-statements,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-non-const-parameter,
+  -readability-identifier-naming,
+  -readability-isolate-declaration,
+  -readability-redundant-control-flow,
+  -readability-simplify-boolean-expr,
+  -readability-uppercase-literal-suffix,
+  -readability-inconsistent-declaration-parameter-name,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -altera-*,
+  -misc-unused-parameters,
+  -bugprone-reserved-identifier,
+  -google-readability-braces-around-statements,
+  -hicpp-braces-around-statements,
+  -bugprone-easily-swappable-parameters,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -clang-diagnostic-unused-parameter,
+  -clang-diagnostic-macro-redefined
+
+HeaderFilterRegex: '^(src|include|lib)/.*'
+WarningsAsErrors: ''
+FormatStyle: file
+
+CheckOptions:
+  - key:             bugprone-assert-side-effect.AssertMacros
+    value:           'assert,configASSERT,ESP_ERROR_CHECK'
+  - key:             bugprone-argument-comment.StrictMode
+    value:           '0'

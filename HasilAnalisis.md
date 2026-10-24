@@ -1,3 +1,7 @@
+> ⚠️ **DEPRECATED — DOKUMEN TIDAK DIGUNAKAN LAGI**
+>
+> Dokumen ini adalah arsip analisis awal dan **tidak lagi menjadi acuan implementasi**. Beberapa bagian (pinout, sensor, dan alur sistem) sudah tidak sesuai dengan firmware terkini. Spesifikasi aktif ada di [`README.md`](README.md) dan folder [`docs/`](docs/).
+
 # LAPORAN ANALISIS SISTEM, KEPUTUSAN ARSITEKTUR, DAN HASIL DISKUSI TIM
 ## Proyek Ujian Akhir Semester Mata Kuliah Internet of Things (IoT)
 ### Sistem Smart ADAM (Autonomous Dustbin And Management) - Kelompok 1
@@ -20,9 +24,8 @@
 * **Inventaris Alat & Bahan Nyata (Tersedia):**
   - ESP32 Development Board
   - Breadboard & Kabel Jumper (Male-to-Male, Male-to-Female)
-  - Sensor Line Follower IR (3–5 Channel)
+  - Sensor Line Follower BFD-1000 (5 channel + sensor Near halangan)
   - Sensor Ultrasonik HC-SR04 (Buka tutup otomatis & pengukur volume sampah internal)
-  - Sensor IR Obstacle FC-51 (Pengaman tabrakan depan)
   - Motor DC Gearbox + Roda (4 set) + Driver Motor DC L298N
   - Sasis Robot 4 Roda
   - Servo Motor SG90 / MG995 (Mekanisme buka tutup bak)
@@ -194,7 +197,7 @@ Halaman khusus konfigurasi lintasan untuk memenuhi kebutuhan penyesuaian rute ta
 Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di hadapan dosen:
 * **Tabel Riwayat Panggilan:** Log stasiun pemanggil, waktu request, durasi pelayanan, dan status eksekusi.
 * **Grafik Tren Volume Sampah:** Grafik garis riwayat akumulasi pembuangan sampah berdasarkan waktu.
-* **Log Keamanan (Safety Logs):** Rekaman insiden ketika sensor FC-51 mendeteksi objek atau rem mendadak di lintasan.
+* **Log Keamanan (Safety Logs):** Rekaman insiden ketika sensor Near BFD-1000 mendeteksi objek atau rem mendadak di lintasan.
 
 ---
 
@@ -213,7 +216,7 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
    ├── Hitung Dijkstra secara lokal (Core 0 FreeRTOS)
    ├── Task Executor Loop 100 Hz telusuri garis via L298N (Core 1)
    ├── Sensor TCS3200 baca marka node di persimpangan
-   ├── Sensor FC-51 rem seketika jika ada halangan fisik
+   ├── Sensor Near BFD-1000 rem seketika jika ada halangan fisik
    ├── HC-SR04 luar buka tutup servo saat tangan mendekat
    └── HC-SR04 dalam ukur persentase volume sampah & kirim telemetri balik
 ```
@@ -228,19 +231,23 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
 | | IN1, IN2 (Arah Kiri) | `GPIO 27`, `GPIO 26` | Output Digital | Logika arah maju/mundur roda kiri |
 | | ENB (PWM Motor Kanan) | `GPIO 32` | Output (LEDC) | Kontrol kecepatan roda kanan |
 | | IN3, IN4 (Arah Kanan) | `GPIO 25`, `GPIO 33` | Output Digital | Logika arah maju/mundur roda kanan |
-| **Sensor Line Follower** | Sensor Kiri (IR 1) | `GPIO 34` | Input Digital | Deteksi garis sisi kiri |
-| | Sensor Tengah (IR 2) | `GPIO 35` | Input Digital | Pemandu garis tengah (*track keeper*) |
-| | Sensor Kanan (IR 3) | `GPIO 39` (VN) | Input Digital | Deteksi garis sisi kanan |
+| **Sensor Line Follower BFD-1000** | S1 (paling kiri) | `GPIO 34` | Input Digital | Deteksi garis sisi kiri (bit 0 pola) |
+| | S2 | `GPIO 35` | Input Digital | Deteksi garis kiri (bit 1 pola) |
+| | S3 (tengah) | `GPIO 39` (VN) | Input Digital | Pemandu garis tengah (*track keeper*, bit 2 pola) |
+| | S4 | `GPIO 21` | Input Digital | Deteksi garis kanan (bit 3 pola) |
+| | S5 (paling kanan) | `GPIO 22` | Input Digital | Deteksi garis sisi kanan (bit 4 pola) |
+| | Near (halangan) | `GPIO 13` | Input Digital | Rem darurat anti-tabrak (`LOW` = Stop), menggantikan FC-51 |
 | **Sensor Warna TCS3200** | S0, S1 (Frekuensi) | `GPIO 19`, `GPIO 18` | Output Digital | Pengatur skala frekuensi sensor |
 | | S2, S3 (Filter) | `GPIO 5`, `GPIO 17` | Output Digital | Seleksi filter warna pembacaan |
 | | OUT (Output Pulsa) | `GPIO 16` | Input (Interrupt) | Deteksi marka warna persimpangan node |
 | **Sensor Ultrasonik HC-SR04** | Trig Pin | `GPIO 4` | Output Digital | Memicu pulsa 10 µs ultrasonik |
 | | Echo Pin | `GPIO 15` | Input (*Divider*) | Pembacaan jarak sampah / tangan (via divider 1k & 2k) |
-| **Sensor Halangan FC-51** | OUT Digital | `GPIO 13` | Input Digital | Rem darurat anti-tabrak (`LOW` = Stop) |
 | **Servo Motor** | Signal PWM | `GPIO 23` | Output (LEDC) | Kendali buka (90°) dan tutup (0°) bak |
 | **Buzzer** | Positif Buzzer | `GPIO 2` | Output Digital | Indikator suara kedatangan / peringatan |
 
 > **Pedoman Catu Daya:** Driver L298N dan Motor DC ditenagai langsung dari baterai Li-ion 2S (7.4V). Pin `VIN` ESP32 ditenagai dari regulator 5V L298N / step-down. **Seluruh jalur Ground (GND) wajib dihubungkan bersama (*Common Ground*).**
+>
+> **Catatan BFD-1000:** Hubungkan `VCC` modul ke **3.3 V** agar output digital S1–S5 dan Near aman untuk GPIO ESP32. Output garis bersifat aktif-*low* (`LOW` = garis hitam); logika ini dibalik di firmware melalui `SENSORS_LINE_ACTIVE_LOW`.
 
 ---
 
@@ -254,7 +261,7 @@ Pusat pencatatan data (*data logging*) yang memberikan nilai tambah akademis di 
 | 4 | **M Anwar Ismail** | Firmware: Line Follower & Motor | Pemrograman PID kendali garis di Core 1 FreeRTOS, kalibrasi manuver belok 90° via L298N. |
 | 5 | **A Hisyammuddin** | Firmware: Sensor TCS3200 Node Marker | Pemrograman deteksi marka warna pita persimpangan node, validasi event `NODE_ARRIVED`. |
 | 6 | **A Shobrun Jamil** | Firmware: Ultrasonik & Volume Sampah | Logika pengukuran kapasitas sampah internal, mekanisme buka-tutup servo dan *dwell timer*. |
-| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Integrasi sensor FC-51 anti-tabrak di depan robot, fabrikasi bak sampah dan dudukan servo. |
+| 7 | **Ramzi Pandu Ma'arif** | Safety, Obstacle & Mekanik Tong | Integrasi sensor Near BFD-1000 anti-tabrak di depan robot, fabrikasi bak sampah dan dudukan servo. |
 | 8 | **M Jazaul Aufi** | QA Tester, Demo Prep & Dokumen | Pengujian integrasi jalur di lantai, rekaman video demonstrasi UAS, dan laporan akhir. |
 
 ---
