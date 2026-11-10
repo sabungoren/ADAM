@@ -10,7 +10,6 @@
 #include "graph_fetch.h"
 #include "motor.h"
 #include "mqtt.h"
-#include "nvs.h"
 #include "nvs_flash.h"
 #include "path_resolver.h"
 #include "sensors.h"
@@ -22,9 +21,9 @@ static const char* TAG = "main";
 #ifndef ADAM_MOTOR_DEMO
 // Normal mode: the full application (MQTT, Dijkstra, sensors, dwell)
 
-// Main application
-void app_main() {
-    ESP_LOGI(TAG, "Startup..");
+// Normal application entry point
+void app_main(void) {
+    ESP_LOGI(TAG, "Startup...");
     ESP_LOGI(TAG, "Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "IDF version: %s", esp_get_idf_version());
 
@@ -40,22 +39,23 @@ void app_main() {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Hardware layer first (motor, sensors, servo) - spec 7.1 Task Executor
+    // Boot at Node 'A' facing north, status IDLE (spec 03.1): the motor starts
+    // at north, the Route Finder starts at node 0 and the executor starts IDLE.
+    // Hardware layer first (motor, sensors, servo), Task Executor after (spec 07.1)
     ESP_ERROR_CHECK(motor_init());
     ESP_ERROR_CHECK(sensors_init());
     ESP_ERROR_CHECK(dwell_init());
 
-    // Boot on Node 'A' facing north, status IDLE (spec 3.1)
     ESP_ERROR_CHECK_WITHOUT_ABORT(wifi_init_sta());
 
-    // The graph is downloaded from the server (GET /graph.bin, https) - Task Fetch
-    // fetch need to be done before anything under it can run
+    // The graph is downloaded from the server (GET /graph.bin, https) - Task
+    // Fetch starts here; MQTT waits for it to settle in mqtt_app_start().
     ESP_ERROR_CHECK(graph_fetch_init());
 
     // Consumers before the producer: the MQTT connect handler publishes the
-    // neutral boot snapshot (graph_version, [A][0], IDLE) before online = 1
-    // (spec 06 §6.4), so the executor must be initialized before the client
-    // can connect. The Route Finder simply waits for the mailbox.
+    // telemetry snapshot before online = 1 (spec 06.4), so the executor must be
+    // initialized before the client can connect. The Route Finder waits for
+    // the mailbox.
     ESP_ERROR_CHECK(path_resolver_init());
     ESP_ERROR_CHECK(executor_init());
 
@@ -68,7 +68,7 @@ void app_main() {
 #    include "freertos/FreeRTOS.h"
 #    include "freertos/task.h"
 
-void app_main() {
+void app_main(void) {
     ESP_LOGI(TAG, "=== ADAM MOTOR DEMO ===");
     motor_init();
 

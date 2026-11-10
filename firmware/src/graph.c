@@ -9,6 +9,7 @@ static uint8_t s_matrix[GRAPH_SIZE];
 static uint32_t s_version; // 0 = graph not ready, see graph_version()
 
 esp_err_t graph_update(const uint8_t* data, uint32_t version) {
+    // Version 0 is the "not ready" sentinel and must never be installed
     if (data == NULL || version == 0) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -31,8 +32,7 @@ bool graph_get(const uint8_t** edges) {
 }
 
 uint32_t graph_version(void) {
-    uint32_t version = s_version;
-    return version;
+    return s_version;
 }
 
 void graph_invalidate(void) {
@@ -44,7 +44,7 @@ bool graph_ready(void) {
     return graph_version() != 0 && graph_get(&edges);
 }
 
-// Weighted undirected graph, anti-symmetric direction (spec 2.1):
+// Weighted undirected graph, anti-symmetric direction (spec 02.1):
 // if i -> j is stored with direction D, then j -> i is stored with
 // direction (D + 2) mod 4 and the same weight.
 //
@@ -55,11 +55,11 @@ bool graph_ready(void) {
 //   M(0,3) N(1,3) O(2,3) P(3,3) Q(4,3) R(5,3)
 //   S(5,2)
 // Rule: max ONE edge per compass direction per node, so a stored
-// direction is always unambiguous for the robot (spec 2).
+// direction is always unambiguous for the robot (spec 02).
 // Notes: no C-G, F-J, K-O lanes (holes); S is a dead end; K is a hub.
 // clang-format off
-// Each row MUST be GRAPH_NODE_COUNT_MAX (26) bytes wide: the matrix is flat,
-// so C no longer pads short rows to 26 the way it did when this was [26][26].
+// Flat row-major matrix: graph[from * 26 + to]. A row MUST be 26 bytes wide:
+// C no longer pads short rows to 26 the way it did when this was [26][26].
 // Columns T..Z are always zero (only 19 nodes are active).
 const uint8_t dummy_graph[GRAPH_SIZE] = {
 // A                              B                              C                              D                              E                              F                              G                              H                              I                              J                              K                              L                              M                              N                              O                              P                              Q                              R                              S                              T  U  V  W  X  Y  Z

@@ -10,13 +10,13 @@
 #define MQTT_MOVE_TOPIC "srv/adam/moveto"
 #define MQTT_RESET_TOPIC "srv/adam/reset"
 
-// Robot -> server topics (docs/06-protocol.md: QoS 1; state telemetry is
-// retained, ack/error are not)
+// Robot -> server topics, all QoS 1. State telemetry is retained, ack/error
+// are not.
 #define MQTT_ACK_TOPIC "adam/srv/ack"
 #define MQTT_CURRENT_POS_TOPIC "adam/srv/current_pos"     // [current:1][next:1], next = 0
-#define MQTT_STATUS_TOPIC "adam/srv/status"               // 1 byte adam_status_t
-#define MQTT_BATTERY_TOPIC "adam/srv/battery"             // 1 byte 0..100
-#define MQTT_TRASH_TOPIC "adam/srv/trash"                 // 1 byte 0..100 (100 = full)
+#define MQTT_STATUS_TOPIC "adam/srv/status"               // 1-byte adam_status_t
+#define MQTT_BATTERY_TOPIC "adam/srv/battery"             // 1-byte 0..100
+#define MQTT_TRASH_TOPIC "adam/srv/trash"                 // 1-byte 0..100 (100 = full)
 #define MQTT_ERROR_TOPIC "adam/srv/error"                 // [req_id:2][code:1], no retain
 #define MQTT_GRAPH_VERSION_TOPIC "adam/srv/graph_version" // [version:4] little-endian, retain
 #define MQTT_ONLINE_TOPIC "adam/srv/online"               // 0x00/0x01, retain, LWT 0x00
@@ -30,20 +30,20 @@ void mqtt_publish(const char* topic, const char* data, int len, int qos, int ret
 // Publish a 1-byte payload (battery, trash, status, online heartbeat)
 void mqtt_publish_u8(const char* topic, uint8_t data, int qos, int retain);
 
-// adam/srv/graph_version: 4 byte little-endian, retained, 0 = not ready
+// adam/srv/graph_version: 4-byte little-endian, retained, 0 = not ready
 // (the value itself is owned by graph.c, graph_version())
 void mqtt_publish_graph_version(uint32_t version);
 
 // Get the next command (move), blocking, called by the Route Finder
 bool mqtt_get_job_blocked(adam_job_t* job);
 
-// Flush the command queue (called on error recovery, spec 7.2)
+// Flush the command queue (called on error recovery, spec 07.2)
 void mqtt_flush_jobs(void);
 
-/* Raise the firmware's own auto-park job back to Home 'A' when the trash
- * reaches the full threshold (07 §7.6). Internal job: no ack is sent for it
- * and the executor skips the dwell at Home (protocol.h adam_job_t.internal).
- * Callable from any task; dropped while the mailbox is not ready yet. */
+// Raise the firmware's own auto-park job back to Home 'A' when the trash
+// reaches the full threshold (spec 07.6). Internal job: no ack is sent for it
+// and the executor skips the dwell at Home (protocol.h adam_job_t.internal).
+// Callable from any task; dropped while the mailbox is not ready yet.
 void mqtt_enqueue_internal_home(void);
 
 #endif // SRC_MQTT_H

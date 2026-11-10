@@ -18,12 +18,12 @@
 
 static const char* TAG = "motor";
 
-// Internal robot heading (spec 3.1): always north at boot and changed
+// Internal robot heading (spec 03.1): always north at boot and changed
 // only through motor_turn_to_heading()
 static volatile uint8_t s_heading = DIR_NORTH;
 
-/* Turn calibration: speed and duration of the 90 degree turn, the 180
- * degree turn and the settle time before and after the maneuver. */
+// Turn calibration: speed and duration of the 90 degree turn, the 180
+// degree turn and the settle time before and after the maneuver.
 #define TURN_SPEED_90 180
 #define TURN_SPEED_UTURN 185
 #define TURN_TIME_90_MS 420
@@ -66,7 +66,7 @@ esp_err_t motor_init(void) {
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
-    ESP_RETURN_ON_ERROR(gpio_config(&dir_cfg), TAG, "motor gpio failed");
+    ESP_RETURN_ON_ERROR(gpio_config(&dir_cfg), TAG, "Motor GPIO failed");
 
     // ENA/ENB PWM channels from a single timer (1kHz, 8-bit)
     const ledc_timer_config_t timer = {
@@ -76,7 +76,7 @@ esp_err_t motor_init(void) {
         .freq_hz = MOTOR_PWM_FREQ_HZ,
         .clk_cfg = LEDC_AUTO_CLK,
     };
-    ESP_RETURN_ON_ERROR(ledc_timer_config(&timer), TAG, "ledc timer failed");
+    ESP_RETURN_ON_ERROR(ledc_timer_config(&timer), TAG, "LEDC timer failed");
 
     const ledc_channel_config_t channels[] = {
         {
@@ -99,7 +99,7 @@ esp_err_t motor_init(void) {
         },
     };
     for (size_t i = 0; i < 2; i++) {
-        ESP_RETURN_ON_ERROR(ledc_channel_config(&channels[i]), TAG, "ledc channel %d failed", (int)i);
+        ESP_RETURN_ON_ERROR(ledc_channel_config(&channels[i]), TAG, "LEDC channel %d failed", (int)i);
     }
 
     motor_halt();
@@ -111,6 +111,7 @@ esp_err_t motor_init(void) {
 }
 
 void motor_set_speed(int left, int right) {
+    // Clamp to the 8-bit duty range; the sign selects the direction
     if (left > MOTOR_SPEED_MAX) {
         left = MOTOR_SPEED_MAX;
     }
@@ -146,7 +147,7 @@ uint8_t motor_heading(void) {
 void motor_turn_to_heading(uint8_t target_dir) {
     uint8_t target = (uint8_t)(target_dir & 0x03);
 
-    // Delta = (Target - Current) mod 4 (spec 3.2)
+    // Delta = (Target - Current) mod 4 (spec 03.2)
     int delta = (target - s_heading + 4) % 4;
     if (delta == 0) {
         return; // keep going straight
@@ -172,6 +173,4 @@ void motor_turn_to_heading(uint8_t target_dir) {
     motor_halt();
     vTaskDelay(pdMS_TO_TICKS(TURN_POST_SETTLE_MS));
     s_heading = target;
-
-    ESP_LOGI(TAG, "Turned to %s (delta %d)", STR_DIR[s_heading], delta);
 }

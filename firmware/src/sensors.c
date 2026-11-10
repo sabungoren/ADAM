@@ -20,13 +20,13 @@
 
 static const char* TAG = "sensors";
 
-/* Mock is selected by the build flag -DADAM_SENSOR_MOCK (platformio.ini:
- * env debug / debug-sensor-mock). The default release build reads the real
- * sensors. */
+// Mock is selected by the build flag -DADAM_SENSOR_MOCK (platformio.ini:
+// env debug / debug-sensor-mock). The default release build reads the real
+// sensors.
 #ifndef ADAM_SENSOR_MOCK
 
-/* TCS3200 sensing rule: a bright marker gives a short pulse (LOW < 150 us
- * with the 20% scaling) while a black line gives a long pulse. */
+// TCS3200 sensing rule: a bright marker gives a short pulse (LOW < 150 us
+// with the 20% scaling) while a black line gives a long pulse.
 #    define TCS_BRIGHT_PULSE_US 150
 // Timeout per measurement, the sensor needs at most 20 ms per channel
 #    define TCS_PULSE_TIMEOUT_US 20000
@@ -92,7 +92,7 @@ esp_err_t sensors_init(void) {
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
-    ESP_RETURN_ON_ERROR(gpio_config(&input_cfg), TAG, "input gpio failed");
+    ESP_RETURN_ON_ERROR(gpio_config(&input_cfg), TAG, "Input GPIO failed");
 
     const gpio_config_t output_cfg = {
         .pin_bit_mask = (1ULL << SENSORS_PIN_TCS_S0) | (1ULL << SENSORS_PIN_TCS_S1) | (1ULL << SENSORS_PIN_TCS_S2) |
@@ -102,7 +102,7 @@ esp_err_t sensors_init(void) {
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
-    ESP_RETURN_ON_ERROR(gpio_config(&output_cfg), TAG, "output gpio failed");
+    ESP_RETURN_ON_ERROR(gpio_config(&output_cfg), TAG, "Output GPIO failed");
 
     // TCS3200 output scaling 20% (S0=HIGH, S1=LOW)
     gpio_set_level((gpio_num_t)SENSORS_PIN_TCS_S0, 1);
@@ -113,17 +113,17 @@ esp_err_t sensors_init(void) {
     const adc_oneshot_unit_init_cfg_t adc_cfg = {
         .unit_id = ADC_UNIT_1,
     };
-    ESP_RETURN_ON_ERROR(adc_oneshot_new_unit(&adc_cfg, &s_adc), TAG, "adc unit failed");
+    ESP_RETURN_ON_ERROR(adc_oneshot_new_unit(&adc_cfg, &s_adc), TAG, "ADC unit failed");
     const adc_oneshot_chan_cfg_t chan_cfg = {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
-    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "adc channel failed");
+    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "ADC channel failed");
 
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
 
-    ESP_LOGI(TAG, "Sensors ready: BFD-1000 5x IR, hand IR, TCS3200, HC-SR04, buzzer");
+    ESP_LOGI(TAG, "Sensors ready: BFD-1000 3x IR, hand IR, TCS3200, HC-SR04, buzzer");
     return ESP_OK;
 }
 
@@ -145,7 +145,7 @@ void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
     }
 }
 
-// Detect a color marker on a node (spec 2.3). Red = S2 low/S3 low,
+// Detect a color marker on a node (spec 02.3). Red = S2 low/S3 low,
 // Green = S2 high/S3 high, Blue = S2 low/S3 high.
 bool sensors_color_marker_present(void) {
     uint32_t r;
@@ -166,8 +166,6 @@ bool sensors_color_marker_present(void) {
         return false;
     }
     b = tcs_measure_pulse_low_us();
-
-    ESP_LOGD(TAG, "TCS pulse us r=%lu g=%lu b=%lu", (unsigned long)r, (unsigned long)g, (unsigned long)b);
 
     // Every channel timed out (pulse longer than 20 ms) = no signal at all
     bool any_signal = (r < TCS_PULSE_TIMEOUT_US) || (g < TCS_PULSE_TIMEOUT_US) || (b < TCS_PULSE_TIMEOUT_US);
@@ -263,29 +261,29 @@ void sensors_buzzer_beep(int ms) {
 
 #else
 
-/* Sensor mock (ADAM_SENSOR_MOCK): runs the whole firmware without hardware.
- * One task advances a scripted scenario and every sensors_* call reads the
- * resulting state, so the executor, dwell loop and MQTT telemetry all see a
- * consistent world:
- *  - line sensors: driven by the real graph. While the executor is MOVING the
- *    mock looks up the edge being driven in the installed matrix:
- *      - edge missing (weight 0) or no graph -> no line at all, so the
- *        executor raises LINE_LOST like an off-track robot;
- *      - valid edge -> straight line {0,1,0} for weight * MOCK_TICKS_PER_WEIGHT
- *        ticks, then a node window of MOCK_NODE_TICKS ticks (weight is the
- *        graph's relative distance, 1..63).
- *    Inside the node window the pattern mirrors the graph topology at the
- *    arrival node, relative to the incoming heading: centre always lit, plus
- *    the right sensor for a branch at +90 deg and the left sensor for -90 deg
- *    (the incoming edge behind is not drawn). A straight node or a dead end
- *    stays {0,1,0}.
- *    The color marker only lights up inside that same node window - it is the
- *    node marker, so edge intervals report false (spec 2.3).
- *  - hand IR: 5 s "hand present", 5 s away, so the dwell timer gets extended
- *  - trash: +1 % every 5 s from 40 %, reaching the full threshold in ~5 min
- *    (exercises auto-park and the TRASH_FULL/bin_full gates)
- *  - battery: -1 % every 30 s from 100 %
- * Timings/values are macros so a test can be sped up or slowed down. */
+// Sensor mock (ADAM_SENSOR_MOCK): runs the whole firmware without hardware.
+// One task advances a scripted scenario and every sensors_* call reads the
+// resulting state, so the executor, dwell loop and MQTT telemetry all see a
+// consistent world:
+//  - line sensors: driven by the real graph. While the executor is MOVING the
+//    mock looks up the edge being driven in the installed matrix:
+//      - edge missing (weight 0) or no graph -> no line at all, so the
+//        executor raises LINE_LOST like an off-track robot;
+//      - valid edge -> straight line {0,1,0} for weight * MOCK_TICKS_PER_WEIGHT
+//        ticks, then a node window of MOCK_NODE_TICKS ticks (weight is the
+//        graph's relative distance, 1..63).
+//    Inside the node window the pattern mirrors the graph topology at the
+//    arrival node, relative to the incoming heading: centre always lit, plus
+//    the right sensor for a branch at +90 deg and the left sensor for -90 deg
+//    (the incoming edge behind is not drawn). A straight node or a dead end
+//    stays {0,1,0}.
+//    The color marker only lights up inside that same node window - it is the
+//    node marker, so edge intervals report false (spec 02.3).
+//  - hand IR: 5 s "hand present", 5 s away, so the dwell timer gets extended
+//  - trash: +1 % every 5 s from 40 %, reaching the full threshold in ~5 min
+//    (exercises auto-park and the TRASH_FULL/bin_full gates)
+//  - battery: -1 % every 30 s from 100 %
+// Timings/values are macros so a test can be sped up or slowed down.
 #    include "executor.h"
 #    include "graph.h"
 
@@ -359,7 +357,7 @@ static void update_sensor(void* pvParameters) {
                 s_state.line[1] = 0;
                 s_state.line[2] = 0;
                 if (edge_ticks == 0) {
-                    ESP_LOGW(TAG, "mock: no edge %c -> %c in the graph, line lost", (int)(from + 'A'), (int)(to + 'A'));
+                    ESP_LOGW(TAG, "Mock: no edge %c -> %c in the graph, line lost", (int)(from + 'A'), (int)(to + 'A'));
                 }
             } else {
                 uint32_t travel = (uint32_t)weight * MOCK_TICKS_PER_WEIGHT;
@@ -373,16 +371,15 @@ static void update_sensor(void* pvParameters) {
                     node_ticks = (travel > 1) ? travel - 1 : 1;
                 }
                 if (edge_ticks == 0) {
-                    ESP_LOGI(TAG, "mock: edge %c -> %c weight %u, travel %lu ms, node window %lu ms", (int)(from + 'A'),
-                             (int)(to + 'A'), (unsigned)weight, (unsigned long)(travel * MOCK_TICK_MS),
-                             (unsigned long)(node_ticks * MOCK_TICK_MS));
+                    ESP_LOGI(TAG, "Mock edge %c -> %c, weight %u", (int)(from + 'A'), (int)(to + 'A'),
+                             (unsigned)weight);
                 }
                 bool node_window = (edge_ticks + node_ticks) >= travel;
 
                 // Edge interval: only the centre sensor sees the line. Node
                 // interval (last ticks): the pattern mirrors the graph at the
                 // arrival node and the color marker lights up in exactly the
-                // same window (spec 2.3). Write the marker first: the executor
+                // same window (spec 02.3). Write the marker first: the executor
                 // samples it on the first tick of the node window, so it must
                 // never see a branch pattern before the color flag is set.
                 s_state.color_detected = node_window;
@@ -427,9 +424,9 @@ static void update_sensor(void* pvParameters) {
 }
 
 esp_err_t sensors_init(void) {
-    ESP_RETURN_ON_FALSE(xTaskCreate(update_sensor, "Update Sensor mock", 2048, NULL, 1, NULL) == pdTRUE, ESP_ERR_NO_MEM,
+    ESP_RETURN_ON_FALSE(xTaskCreate(update_sensor, "Task Sensor Mock", 2048, NULL, 1, NULL) == pdTRUE, ESP_ERR_NO_MEM,
                         TAG, "Failed to create sensor mock task");
-    ESP_LOGW(TAG, "SENSOR MOCK ACTIVE: line/node marker, hand IR, trash and battery are simulated");
+    ESP_LOGW(TAG, "Sensor mock active: line/node marker, hand IR, trash and battery are simulated");
     return ESP_OK;
 }
 
@@ -462,8 +459,7 @@ uint8_t sensors_battery_percent(void) {
 }
 
 void sensors_buzzer_beep(int ms) {
-    ESP_LOGI(TAG, "buzzer beep %d ms (mock)", ms);
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
-#endif /* ifndef ADAM_SENSOR_MOCK */
+#endif // ADAM_SENSOR_MOCK

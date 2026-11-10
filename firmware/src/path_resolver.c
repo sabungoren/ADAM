@@ -22,8 +22,9 @@
 static const char* TAG = "path_resolver";
 
 static QueueHandle_t s_path_queue;
-static volatile size_t s_current_node = 0; // Node 'A' = 0, boot facing north (spec 3.1)
+static volatile size_t s_current_node = 0; // Node 'A' = 0, boot facing north (spec 03.1)
 
+// Pick the unvisited node with the smallest known distance (Dijkstra helper)
 static int find_min_distance(const dist_t dist[restrict GRAPH_NODE_COUNT_MAX],
                              const bool visited[restrict GRAPH_NODE_COUNT_MAX]) {
     dist_t min_distance = DIST_INF;
@@ -78,6 +79,7 @@ static bool dijkstra(const uint8_t graph[restrict GRAPH_SIZE], size_t source, si
 
             uint8_t weight = EDGE_WEIGHT(edge);
 
+            // Guard against dist_t overflow before adding the edge weight
             if (dist[u] > DIST_INF - weight) {
                 continue;
             }
@@ -94,6 +96,7 @@ static bool dijkstra(const uint8_t graph[restrict GRAPH_SIZE], size_t source, si
     return dist[target] != DIST_INF;
 }
 
+// Walk the previous[] chain from the target back to the source, then reverse it
 static int build_path(size_t target, const size_t* previous, size_t* out, int max) {
     int n = 0;
 
@@ -112,11 +115,11 @@ static int build_path(size_t target, const size_t* previous, size_t* out, int ma
 }
 
 static inline char itochar(size_t i) {
-    return i + 'A';
+    return (char)(i + 'A');
 }
 
 static inline size_t chartoi(char c) {
-    return c - 'A';
+    return (size_t)(c - 'A');
 }
 
 // Wrap the Dijkstra result into a nav_path_t and queue it for the Task Executor
@@ -127,8 +130,8 @@ static void enqueue_nav(size_t* order, int n, const adam_job_t* job, const char*
     memcpy(nav.path, order, (size_t)n * sizeof(size_t));
     memcpy(&nav.job, job, sizeof(adam_job_t));
 
-    // Worst case "A -> B -> ..." for 26 nodes = 101 chars + NUL
-    char route[(GRAPH_NODE_COUNT_MAX * 4) + 1];
+    // Worst case "A -> B -> ..." for 26 nodes = 126 chars + NUL
+    char route[(GRAPH_NODE_COUNT_MAX * 5) + 1];
     int off = 0;
     for (int i = 0; i < n && off < (int)sizeof(route) - 5; i++) {
         off += snprintf(route + off, sizeof(route) - off, i ? " -> %c" : "%c", itochar(order[i]));
@@ -148,7 +151,8 @@ static void path_resolver(void* pvParameters) {
     for (;;) {
         const uint8_t* edges = NULL;
         if (!graph_get(&edges)) {
-            vTaskDelay(100 / portTICK_PERIOD_MS);
+            // No matrix installed yet (boot or fetch failed), retry later
+            vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
@@ -162,7 +166,7 @@ static void path_resolver(void* pvParameters) {
 
         size_t dest_node;
         if (job.internal) {
-            // Auto-park (07 §7.6): always Home 'A', no dwell there - the
+            // Auto-park (spec 07.6): always Home 'A', no dwell there - the
             // executor settles straight back to IDLE when the path ends.
             dest_node = 0;
         } else {
@@ -174,20 +178,18 @@ static void path_resolver(void* pvParameters) {
             dest_node = target;
             if (dest_node == s_current_node) {
                 // Already on the target: queue a 1-node path, the Task Executor
-                // runs the dwell on that node right away (spec 4)
+                // runs the dwell on that node right away (spec 04)
                 size_t order[1] = {dest_node};
                 enqueue_nav(order, 1, &job, "dwell in place");
                 continue;
             }
         }
 
-        ESP_LOGI(TAG, "Calculate route from %c to %c", itochar(s_current_node), itochar(dest_node));
-
         dist_t dist[GRAPH_NODE_COUNT_MAX];
         size_t prev[GRAPH_NODE_COUNT_MAX];
 
         if (!dijkstra(edges, s_current_node, dest_node, dist, prev)) {
-            // Spec 6.2: no route available, report the error and wait
+            // No route available: report the error and wait (spec 06.2)
             ESP_LOGE(TAG, "No route from %c to %c", itochar(s_current_node), itochar(dest_node));
             executor_set_error(job.req.id, ADAM_ERR_NO_PATH);
             continue;
@@ -195,14 +197,11 @@ static void path_resolver(void* pvParameters) {
 
         size_t order[GRAPH_NODE_COUNT_MAX];
         int n = build_path(dest_node, prev, order, GRAPH_NODE_COUNT_MAX);
-        for (size_t i = n; i < GRAPH_NODE_COUNT_MAX; i++) {
-            order[i] = (size_t)-1;
-        }
 
         char label[2] = {job.internal ? 'P' : job.req.node, '\0'};
         enqueue_nav(order, n, &job, label);
 
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -212,6 +211,7 @@ esp_err_t path_resolver_init(void) {
         return ESP_ERR_NO_MEM;
     }
 
+    // 3 KB stack, priority 2, pinned to core 0
     if (xTaskCreatePinnedToCore(path_resolver, "Task Route Finder", 3072, NULL, 2, NULL, 0) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }

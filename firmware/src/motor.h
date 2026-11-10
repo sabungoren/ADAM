@@ -4,7 +4,7 @@
 #include "esp_err.h"
 #include <stdint.h>
 
-// L298N motor driver pins (table 7 of the analysis)
+// L298N motor driver pins (docs/08-pins.md)
 #define MOTOR_PIN_ENA 14 // PWM speed left
 #define MOTOR_PIN_IN1 27 // Left direction 1
 #define MOTOR_PIN_IN2 26 // Left direction 2
@@ -29,8 +29,8 @@ void motor_halt(void);
 // Current heading (DIR_NORTH / DIR_EAST / DIR_SOUTH / DIR_WEST from graph.h)
 uint8_t motor_heading(void);
 
-/* Turn the robot on the spot until it faces the target heading (spec 3.2).
- * Blocking: the robot stays in place while turning. */
+// Turn the robot on the spot until it faces the target heading (spec 03.2).
+// Blocking: the robot stays in place while turning.
 void motor_turn_to_heading(uint8_t target_dir);
 
 #endif // SRC_MOTOR_H

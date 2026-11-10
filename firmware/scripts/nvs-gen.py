@@ -1,8 +1,7 @@
-
 Import("env")
 
-import os
 import csv
+import os
 import subprocess
 from pathlib import Path
 
@@ -122,5 +121,3 @@ env.AddCustomTarget(
     title="Upload NVS",
     description="Generate and flash NVS partition",
 )
-
-env["NVS_BIN"] = str(NVS_BIN)

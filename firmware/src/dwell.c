@@ -45,6 +45,7 @@ static void servo_write_deg(int deg) {
 
     uint32_t us =
         DWELL_SERVO_MIN_US + ((uint32_t)((DWELL_SERVO_MAX_US - DWELL_SERVO_MIN_US) * deg) / DWELL_SERVO_RANGE_DEG);
+    // 50 Hz means a 20000 us period; duty is the pulse width inside it
     uint32_t duty = (uint32_t)(((uint64_t)us * (1U << DWELL_SERVO_RESOLUTION)) / 20000U);
 
     ledc_set_duty(LEDC_LOW_SPEED_MODE, DWELL_SERVO_LEDC_CHANNEL, duty);
@@ -52,7 +53,7 @@ static void servo_write_deg(int deg) {
 }
 
 esp_err_t dwell_init(void) {
-    // Dedicated LEDC timer for the 50 Hz servo
+    // Dedicated LEDC timer for the lid servo
     const ledc_timer_config_t timer = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .timer_num = DWELL_SERVO_LEDC_TIMER,
@@ -74,7 +75,8 @@ esp_err_t dwell_init(void) {
     ESP_RETURN_ON_ERROR(ledc_channel_config(&chan), TAG, "servo ledc channel failed");
 
     servo_write_deg(DWELL_SERVO_CLOSE_DEG);
-    ESP_LOGI(TAG, "Lid servo ready (pin %d, 50 Hz, %d-%d us)", DWELL_SERVO_PIN, DWELL_SERVO_MIN_US, DWELL_SERVO_MAX_US);
+    ESP_LOGI(TAG, "Lid servo ready (pin %d, %d Hz, %d-%d us)", DWELL_SERVO_PIN, DWELL_SERVO_FREQ_HZ, DWELL_SERVO_MIN_US,
+             DWELL_SERVO_MAX_US);
     return ESP_OK;
 }
 
@@ -83,7 +85,7 @@ void dwell_close_lid(void) {
 }
 
 void dwell_run(void) {
-    ESP_LOGI(TAG, "Reached the target node, opening the lid (servo %d deg)", DWELL_SERVO_OPEN_DEG);
+    ESP_LOGI(TAG, "Opening lid");
     servo_write_deg(DWELL_SERVO_OPEN_DEG);
 
     // Arrival notification: 2 short beeps
@@ -93,37 +95,28 @@ void dwell_run(void) {
 
     int64_t dwell_start = dwell_now_ms();
     int64_t total_start = dwell_start;
-    bool hand_was_present = false;
     bool capped = false;
 
-    // Dwell loop: 15 second timer, reset while the hand IR sees a hand (spec 4).
+    // Dwell loop: 15 second timer, reset while the hand IR sees a hand (spec 04).
     // DWELL_TOTAL_MAX_MS caps the entire stop, so a hand that never leaves the
-    // opening cannot hold the node forever (spec 4: robot like an elevator).
+    // opening cannot hold the node forever (spec 04: robot like an elevator).
     while (dwell_now_ms() - dwell_start < DWELL_TIME_MS) {
         if (dwell_now_ms() - total_start >= DWELL_TOTAL_MAX_MS) {
             capped = true;
             break;
         }
-        bool hand_present = sensors_hand_detected();
 
-        if (hand_present) {
+        if (sensors_hand_detected()) {
             dwell_start = dwell_now_ms();
-            if (!hand_was_present) {
-                ESP_LOGI(TAG, "Hand detected at the trash opening, dwell timer extended");
-            }
-        } else if (hand_was_present) {
-            ESP_LOGI(TAG, "Hand removed, dwell timer continues");
         }
-        hand_was_present = hand_present;
 
         vTaskDelay(pdMS_TO_TICKS(DWELL_SAMPLE_MS));
     }
 
     if (capped) {
-        ESP_LOGW(TAG, "Dwell total cap (%d ms) reached, closing the lid (servo %d deg)", DWELL_TOTAL_MAX_MS,
-                 DWELL_SERVO_CLOSE_DEG);
+        ESP_LOGW(TAG, "Dwell cap reached, closing lid");
     } else {
-        ESP_LOGI(TAG, "Dwell timer expired, closing the lid (servo %d deg)", DWELL_SERVO_CLOSE_DEG);
+        ESP_LOGI(TAG, "Closing lid");
     }
     servo_write_deg(DWELL_SERVO_CLOSE_DEG);
 

@@ -22,7 +22,7 @@
 
 static const char* TAG = "executor";
 
-// s_state = what the task loop is doing, s_status = published wire code
+// s_state = what the task loop is doing, s_published_status = last published wire code
 // (adam_status_t). OBSTACLE is reserved and no longer emitted.
 // STATE_DWELL keeps "serving at the lid" distinct from STATE_IDLE so internal
 // code can tell an idle robot from one that is still in its dwell window.
@@ -54,9 +54,9 @@ static void publish_error(uint16_t req_id, adam_error_t reason);
 #define PID_BASE_SPEED 160
 #define PID_KP 45.0f
 #define PID_KD 18.0f
-#define PID_LOOP_MS 10 // 100 Hz control loop (spec 7.1)
+#define PID_LOOP_MS 10 // 100 Hz control loop (spec 07.1)
 
-// Node detection (spec 2.3): the TCS3200 color marker is the primary detector.
+// Node detection (spec 02.3): the TCS3200 color marker is the primary detector.
 // One measurement blocks the control loop for a few ms, so it is sampled on an
 // interval and debounced. A node on a straight stretch or at a line end has no
 // side branches, so the line pattern alone cannot find it.
@@ -67,7 +67,7 @@ static void publish_error(uint16_t req_id, adam_error_t reason);
 #define NODE_BRANCH_RUNS 3
 #define LINE_PATTERN_CENTER 0b010
 #define LINE_PATTERN_SIDES 0b101
-// Navigation errors: line lost while MOVING (spec 7.2) and step timeout.
+// Navigation errors: line lost while MOVING (spec 07.2) and step timeout.
 // The edge weight is a relative distance / estimated travel time (1..63), so
 // one fixed deadline cannot fit every edge: a weight-47 edge takes far longer
 // than a weight-1 edge. Budget = base (turn manoeuvre + margin) + weight.
@@ -80,7 +80,7 @@ static size_t s_step = 0;
 
 static float s_last_error = 0.0f;
 
-// Node detection counters (spec 2.3): consecutive color-marker samples, and
+// Node detection counters (spec 02.3): consecutive color-marker samples, and
 // consecutive branch patterns for the fallback path.
 static int s_marker_run = 0;
 static int s_branch_run = 0;
@@ -159,19 +159,19 @@ void executor_publish_telemetry(void) {
     xSemaphoreGive(s_telemetry_publish_mutex);
 }
 
-// Boot status (07 §7.2): the neutral IDLE + [A][0] went out with the connect
-// handler before online = 1; here the boot decision is settled - ERROR (with
-// the FETCH_FAILED error) when every attempt failed, IDLE once the graph is
-// installed. Returns true when settled and the task loop may run.
+// Boot status (spec 07.2): before online = 1 the connect handler has already
+// published the telemetry snapshot; here the boot decision is settled - ERROR
+// (with the FETCH_FAILED error) when every attempt failed, IDLE once the graph
+// is installed. Returns true when settled and the task loop may run.
 static bool boot_status_settle(void) {
     // Query graph_fetch's own state instead of having it push state to us.
     // graph_fetch owns the "fetch failed" state, so we pull it from there.
     if (!graph_fetch_success()) {
         // error(req_id = 0, FETCH_FAILED) + ERROR, graph_version stays 0
-        // (06 §6.4): the robot takes no job until reset or reboot.
+        // (spec 06.4): the robot takes no job until reset or reboot.
         publish_error(0, ADAM_ERR_FETCH_FAILED);
         publish_state(path_resolver_current(), POS_NEXT_NONE, ADAM_STATUS_ERROR);
-        ESP_LOGE(TAG, "Fetch failed after all retries, boot status = ERROR (07 §7.1)");
+        ESP_LOGE(TAG, "Fetch failed, entering ERROR");
         return true;
     }
     if (!graph_ready()) {
@@ -181,9 +181,9 @@ static bool boot_status_settle(void) {
     return true;
 }
 
-// current_pos = [current][next], 2 byte retain; next = 0 when heading nowhere.
+// current_pos = [current:1][next:1], retain; next = 0x00 when heading nowhere.
 // next is a node *index*, so it needs its own "none" value: 0 is node 'A', while
-// the wire sentinel for "no next node" is 0x00 (06-protocol.md:349). Passing 0
+// the wire sentinel for "no next node" is 0x00 (spec 06.4). Passing 0
 // here would report "nowhere" whenever the robot heads for Home.
 // The mutex serializes state updates with MQTT replay through both publish calls;
 // the critical section protects the small shared snapshot itself.
@@ -204,24 +204,23 @@ static void publish_state(size_t current, int next, adam_status_t status) {
 
     mqtt_publish(MQTT_CURRENT_POS_TOPIC, (const char*)pos, sizeof(pos), 1, true);
     if (status_changed) {
-        uint8_t wire = (uint8_t)status;
-        mqtt_publish(MQTT_STATUS_TOPIC, (const char*)&wire, 1, 1, true);
+        mqtt_publish_u8(MQTT_STATUS_TOPIC, (uint8_t)status, 1, true);
     }
-    ESP_LOGI(TAG, "State published: %c -> %c, status=%d", pos[0], pos[1] ? pos[1] : '-', (int)status);
     xSemaphoreGive(s_telemetry_publish_mutex);
 }
 
-// trash right after the lid closes (07:107, 04:14); at boot via MQTT connect
+// Publish trash right after the lid closes (spec 07.4, 04); at boot it goes out
+// through the MQTT connect handler.
 static void publish_trash(void) {
     uint8_t trash = sensors_trash_level_percent();
-    mqtt_publish(MQTT_TRASH_TOPIC, (const char*)&trash, 1, 1, true);
+    mqtt_publish_u8(MQTT_TRASH_TOPIC, trash, 1, true);
 }
 
-/* Auto-park (07 §7.6): when a stop ends and the bin already reached the full
- * threshold, raise an internal job back to Home so the robot never blocks a
- * serving node while the bin is full (the gateway rejects new calls with
- * TRASH_FULL/bin_full anyway). Skipped on Home itself - emptying the bin is
- * done there, and a fresh trash value arrives with the next reset/dwell. */
+// Auto-park (spec 07.6): when a stop ends and the bin already reached the full
+// threshold, raise an internal job back to Home so the robot never blocks a
+// serving node while the bin is full (the gateway rejects new calls with
+// TRASH_FULL/bin_full anyway). Skipped on Home itself - emptying the bin is
+// done there, and a fresh trash value arrives with the next reset/dwell.
 static void maybe_auto_park(void) {
     if (path_resolver_current() == 0) {
         return;
@@ -234,10 +233,10 @@ static void maybe_auto_park(void) {
     mqtt_enqueue_internal_home();
 }
 
-/* One dwell on the target node (spec 4): publish DWELL, run the blocking dwell
- * window, then settle back to IDLE. The rollback is conditional because
- * executor_set_error() can be raised from the Route Finder task while
- * dwell_run() blocks - its ERROR status must not be overwritten by IDLE. */
+// One dwell on the target node (spec 04): publish DWELL, run the blocking dwell
+// window, then settle back to IDLE. The rollback is conditional because
+// executor_set_error() can be raised from the Route Finder task while
+// dwell_run() blocks - its ERROR status must not be overwritten by IDLE.
 static void run_dwell(size_t node) {
     s_state = STATE_DWELL;
     publish_state(node, POS_NEXT_NONE, ADAM_STATUS_DWELL);
@@ -253,9 +252,9 @@ static void run_dwell(size_t node) {
     maybe_auto_park();
 }
 
-// [req_id:2 LE][code:1], QoS 1, no retain (06:348). The id comes from the
+// [req_id:2 LE][code:1], QoS 1, no retain (spec 06.4). The id comes from the
 // caller so it can never be stale; 0 for an error that belongs to no request
-// (07:76). Single writer for adam/srv/error.
+// (spec 07.3). Single writer for adam/srv/error.
 static void publish_error(uint16_t req_id, adam_error_t reason) {
     adam_req_t data = {
         .id = req_id,
@@ -268,27 +267,27 @@ void executor_set_error(uint16_t req_id, adam_error_t reason) {
     if (s_state == STATE_ERROR) {
         // Already stopped: the state transition must not repeat, but the
         // failure still has to reach the gateway - e.g. a job that raced
-        // into the ERROR window reports its own error here (07 §7.3).
+        // into the ERROR window reports its own error here (spec 07.3).
         publish_error(req_id, reason);
         ESP_LOGE(TAG, "Already in ERROR: %s reported without re-entering", err_name(reason));
         return;
     }
     s_state = STATE_ERROR;
 
-    // Spec 7.3.1: the motor stops and the lid is closed
+    // The motor stops and the lid is closed (spec 07.3)
     motor_halt();
     dwell_close_lid();
-    // Spec 7.2: flush every queue
+    // Flush every queue (spec 07.2)
     path_resolver_flush_paths();
     mqtt_flush_jobs();
 
     publish_error(req_id, reason);
-    // Update current_pos and status in one snapshot transaction (07:76).
+    // Update current_pos and status in one snapshot transaction (spec 07.3).
     publish_state(path_resolver_current(), POS_NEXT_NONE, ADAM_STATUS_ERROR);
-    ESP_LOGE(TAG, "ERROR: %s, robot stopped and waits for an admin reset (spec 7.2)", err_name(reason));
+    ESP_LOGE(TAG, "ERROR: %s, waiting for admin reset", err_name(reason));
 }
 
-// Raised by the MQTT task when an admin reset is accepted (07 §7.3.2). Only a
+// Raised by the MQTT task when an admin reset is accepted (spec 07.3.2). Only a
 // flag: the executor loop is the sole writer of s_nav/s_state, so a cross-task
 // request can never race the navigation state.
 static volatile bool s_reset_pending = false;
@@ -297,13 +296,13 @@ void executor_request_reset(void) {
     s_reset_pending = true;
 }
 
-/* Admin reset = state fresh, a reboot without cutting power (07 §7.3.2):
- * clear every internal piece of state, force the logical position to Home
- * facing north - placing the robot there is an operational prerequisite the
- * firmware cannot verify - re-fetch the graph with the boot rules, and
- * republish the whole retained telemetry so stale state (e.g. trash emptied
- * at Home) is refreshed. The reset itself never gets an ack/error; success is
- * the retained IDLE + [A][0] + matching graph_version. */
+// Admin reset = state fresh, a reboot without cutting power (spec 07.3.2):
+// clear every internal piece of state, force the logical position to Home
+// facing north - placing the robot there is an operational prerequisite the
+// firmware cannot verify - re-fetch the graph with the boot rules, and
+// republish the whole retained telemetry so stale state (e.g. trash emptied
+// at Home) is refreshed. The reset itself never gets an ack/error; success is
+// the retained IDLE + [A][0] + matching graph_version.
 static void perform_reset(void) {
     ESP_LOGW(TAG, "Admin reset: clearing state, re-fetch graph, force [A][0] north");
 
@@ -323,7 +322,7 @@ static void perform_reset(void) {
     publish_state(0, POS_NEXT_NONE, ADAM_STATUS_IDLE);
 
     // Re-fetch with the boot rules: version 0 while loading, and on failure
-    // version stays 0 so every gate refuses jobs (06 §6.4, 07 §7.3.2). The
+    // version stays 0 so every gate refuses jobs (spec 06.4, 07.3.2). The
     // fetch runs in its own task - this one's 4 KB stack cannot hold the TLS
     // handshake.
     graph_invalidate();
@@ -334,19 +333,19 @@ static void perform_reset(void) {
         publish_state(0, POS_NEXT_NONE, ADAM_STATUS_IDLE);
         uint8_t battery = sensors_battery_percent();
         uint8_t trash = sensors_trash_level_percent();
-        mqtt_publish(MQTT_BATTERY_TOPIC, (const char*)&battery, 1, 1, true);
-        mqtt_publish(MQTT_TRASH_TOPIC, (const char*)&trash, 1, 1, true);
+        mqtt_publish_u8(MQTT_BATTERY_TOPIC, battery, 1, true);
+        mqtt_publish_u8(MQTT_TRASH_TOPIC, trash, 1, true);
         s_state = STATE_IDLE;
         ESP_LOGI(TAG, "Reset done: IDLE at [A][0], graph version %d", (int)graph_version());
     } else {
         publish_error(0, ADAM_ERR_FETCH_FAILED);
         publish_state(0, POS_NEXT_NONE, ADAM_STATUS_ERROR);
         s_state = STATE_ERROR;
-        ESP_LOGE(TAG, "Reset: graph re-fetch failed, robot stays ERROR (07 §7.3.2)");
+        ESP_LOGE(TAG, "Graph re-fetch failed, staying in ERROR");
     }
 }
 
-// Turn onto the edge direction and reset the deadline (spec 3.2). Returns false
+// Turn onto the edge direction and reset the deadline (spec 03.2). Returns false
 // when the edge is not valid in the current graph.
 static bool move_begin_step(void) {
     s_line_active = false;
@@ -367,9 +366,10 @@ static bool move_begin_step(void) {
     motor_turn_to_heading(EDGE_DIR(edge));
     s_state = STATE_MOVING;
 
-    // Edge start enters MOVING; update status and current_pos atomically (07:58).
+    // Edge start enters MOVING; update status and current_pos atomically (spec 07.4).
     publish_state(from, (int)to, ADAM_STATUS_MOVING);
 
+    // Per-edge deadline: fixed base plus one second per weight unit
     s_step_timeout_ms = STEP_TIMEOUT_BASE_MS + ((int32_t)EDGE_WEIGHT(edge) * STEP_TIMEOUT_PER_WEIGHT_MS);
     s_step_started_ms = now_ms();
     s_step_deadline = s_step_started_ms + s_step_timeout_ms;
@@ -419,12 +419,12 @@ static void moving_tick(void) {
     sensors_line_read(line);
     int pattern = line_pattern(line);
 
-    // LINE_LOST (spec 7.2): no sensor sees the line
+    // LINE_LOST (spec 07.2): no sensor sees the line
     if (pattern == 0) {
         if (s_no_line_since < 0) {
             s_no_line_since = now_ms();
         } else if (now_ms() - s_no_line_since > LINE_LOST_MS) {
-            ESP_LOGE(TAG, "Line lost (5 sensors blank > %d ms)", LINE_LOST_MS);
+            ESP_LOGE(TAG, "Line lost (3 sensors blank > %d ms)", LINE_LOST_MS);
             executor_set_error(s_nav.job.req.id, ADAM_ERR_LINE_LOST);
             return;
         }
@@ -441,7 +441,7 @@ static void moving_tick(void) {
 
     motor_set_speed(PID_BASE_SPEED - (int)(p + d), PID_BASE_SPEED + (int)(p + d));
 
-    // Node arrival detection (spec 2.3): the TCS3200 color marker is the
+    // Node arrival detection (spec 02.3): the TCS3200 color marker is the
     // primary detector, so a node on a straight stretch or at a line end
     // (centre sensor only) is still found. Sample it on an interval because one
     // measurement blocks the control loop for a few ms, then debounce over
@@ -503,7 +503,7 @@ static void moving_tick(void) {
     // Valid node arrival
     motor_halt();
     s_line_active = false;
-    ESP_LOGI(TAG, "NODE DETECTED (marker: %s)", node_via_marker ? "TCS3200 color" : "line branch fallback");
+    ESP_LOGI(TAG, "Node detected (marker: %s)", node_via_marker ? "TCS3200 color" : "line branch fallback");
 
     size_t to = s_nav.path[s_step];
     s_marker_run = 0;
@@ -512,18 +512,15 @@ static void moving_tick(void) {
     path_resolver_set_current(to);
     s_step++;
 
-    // Home (Node A): face north again (spec 3.1 and 7.2)
+    // Home (Node A): face north again (spec 03.1, 07.2)
     if (to == 0) {
         motor_turn_to_heading(DIR_NORTH);
     }
 
     if (s_step >= s_nav.len) {
         // Path finished; publish the destination with its settled status directly.
-        s_marker_run = 0;
-        s_branch_run = 0;
-
         if (s_nav.job.internal) {
-            // Auto-park (07 §7.6): no dwell on the internal ride home, settle
+            // Auto-park (spec 07.6): no dwell on the internal ride home, settle
             // straight back to IDLE at Home.
             publish_state(to, POS_NEXT_NONE, ADAM_STATUS_IDLE);
             s_state = STATE_IDLE;
@@ -531,7 +528,7 @@ static void moving_tick(void) {
             return;
         }
 
-        // Dwell on the target node (spec 4) after a normal ride.
+        // Dwell on the target node after a normal ride (spec 04).
         ESP_LOGI(TAG, "Normal navigation finished, dwell on %c", (int)(to + 'A'));
         run_dwell(to);
         return;
@@ -567,7 +564,7 @@ static void idle_tick(void) {
 
     if (s_nav.len == 1) {
         if (s_nav.job.internal) {
-            // Auto-park while already on Home (07 §7.6): no dwell, settle
+            // Auto-park while already on Home (spec 07.6): no dwell, settle
             // straight back to IDLE.
             motor_turn_to_heading(DIR_NORTH);
             publish_state(path_resolver_current(), POS_NEXT_NONE, ADAM_STATUS_IDLE);
@@ -575,7 +572,7 @@ static void idle_tick(void) {
             ESP_LOGI(TAG, "Auto-park: already on Home, back to IDLE");
             return;
         }
-        // Target = current position: dwell right away (spec 4), without moving
+        // Target = current position: dwell right away, without moving (spec 04)
         ESP_LOGI(TAG, "Already on the target node, dwell right away");
         run_dwell(s_nav.path[0]);
         return;
@@ -589,14 +586,14 @@ static void idle_tick(void) {
 static void executor(void* pvParameters) {
     ESP_LOGI(TAG, "Task Executor ON: PID 100 Hz (Kp=%d, Kd=%d), core 1, prio 3", (int)PID_KP, (int)PID_KD);
 
-    // No status before Task Fetch settled (07 §7.2): IDLE only with a real
+    // No status before Task Fetch settled (spec 07.2): IDLE only with a real
     // graph, ERROR when all 3 attempts failed
     while (!boot_status_settle()) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
     for (;;) {
-        // 07 §7.3.2 - an admin reset is accepted only while IDLE or ERROR; the
+        // Spec 07.3.2 - an admin reset is accepted only while IDLE or ERROR; the
         // MQTT task only raises the flag, and it is consumed here, the point
         // where the executor owns the navigation state. While serving
         // (MOVING/DWELL) the flag is dropped without a response.
@@ -628,8 +625,8 @@ static void executor(void* pvParameters) {
             break;
 
         case STATE_ERROR:
-            // Spec 7.2: the robot stays where it is and waits for the admin;
-            // the reset flag consumed above is the only way out (07 §7.3.2).
+            // The robot stays where it is and waits for the admin (spec 07.2);
+            // the reset flag consumed above is the only way out (spec 07.3.2).
             motor_halt();
             vTaskDelay(pdMS_TO_TICKS(200));
             break;
