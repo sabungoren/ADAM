@@ -18,7 +18,7 @@ Firmware dijalankan menggunakan Sistem Operasi Real-Time (**FreeRTOS**) pada mik
                                                 v
                                           [ RAM Graph ]
 
-[ Task Fetch ] --GET /graph.bin (boot only)--> [ Gateway ]
+[ Task Fetch ] --GET /graph.bin (boot / admin reset)--> [ Gateway ]
 ```
 
 ## 7.1 Alokasi Task & Prioritas
@@ -27,17 +27,17 @@ Firmware dijalankan menggunakan Sistem Operasi Real-Time (**FreeRTOS**) pada mik
 | :--- | :--- | :--- | :--- |
 | **`Task Executor`** | **High (3)** | Core 1 | PID line follower (100 Hz), sensor garis/warna, kontrol motor, dwell timer dengan sensor IR tangan, update `current_pos`, dan transisi `IDLE`/`DWELL`/`ERROR`. |
 | **`Task Route Finder`** | Medium (2) | Core 0 | Menjalankan Dijkstra **saat job dieksekusi**, bukan saat perintah diterima. Tidak memiliki backlog rute. |
-| **`Task MQTT`** | Medium (2) | Core 0 | Koneksi WSS, QoS 1, **clean session true**, keepalive 30 detik, LWT, validasi `moveto`, `ack`, deduplikasi `(req_id, node)`, dan publish telemetri. |
+| **`Task MQTT`** | Medium (2) | Tidak dipin (esp-mqtt) | Koneksi WSS, QoS 1, **clean session true**, keepalive 30 detik, LWT, validasi `moveto`, `ack`, deduplikasi `(req_id, node)`, dan publish telemetri. |
 | **`Task Fetch`** | Low (1) | Core 0 | Mengambil `GET /graph.bin` **saat boot atau saat admin reset**, memvalidasi framing (HTTP 200, `X-Graph-Version` bukan `0`, body 676 byte, header & body dari snapshot yang sama), lalu menyalin ke buffer tetap 26 × 26. Maksimal 3 percobaan dengan jeda 2 detik; jika gagal, mem-publish `error(req_id = 0, FETCH_FAILED)` dan `status = ERROR`, tidak retry otomatis (reset atau reboot mengulang fetch, §7.3.2). Tidak ada refresh runtime. |
 
 ## 7.2 Alur Normal
 
 1. **Boot**
    * **Prasyarat operasional**: robot dinyalakan di posisi `A` (Home) menghadap Utara — ini kewajiban admin, bukan fakta firmware (lihat [docs/03-navigation.md](03-navigation.md) §3.1).
-   * Sebelum `online = 1`, robot mem-publish **state netral** (retain): `graph_version = 0`, `current_pos = [A][0]`, dan `status = IDLE`. Dengan urutan ini retained sesi sebelumnya (mis. `MOVING` + `[B][C]`) tidak pernah terlihat saat boot; `graph_version = 0` menahan dispatch selama fetch berjalan.
-   * Setelah state netral, robot mem-publish `online = 1` (heartbeat 10 detik).
-   * `Task Fetch` mengambil graf maksimal 3 kali dengan jeda 2 detik. Jika ketiga percobaan gagal, robot mem-publish `error(req_id = 0, FETCH_FAILED)`, `status = ERROR`, `graph_version` tetap `0`, dan tidak menerima job sampai admin melakukan reset atau reboot (reset mengunduh ulang graf, lihat §7.3.2).
-   * Jika fetch sukses, robot mem-publish `graph_version` sebenarnya, baterai, dan kapasitas sampah (`status`/`current_pos` sudah netral dari langkah awal).
+   * Firmware menginisialisasi NVS, network stack, dan hardware (motor, sensor, servo), lalu menjalankan `wifi_init_sta()` yang menunggu sampai STA mendapat IP atau batas waktu tercapai.
+   * `Task Fetch` mulai berjalan setelah `wifi_init_sta()` selesai. `mqtt_app_start()` menunggu fetch selesai (`graph_fetch_success()`) sebelum client MQTT connect, sehingga `graph_version` sudah final saat `online = 1`.
+   * Saat connect, robot mem-publish `graph_version` (versi hasil fetch, atau `0` bila fetch gagal), lalu snapshot telemetri `current_pos = [A][0]` + `status = IDLE`, lalu `online = 1` (heartbeat 10 detik), lalu `battery` dan `trash`. Retained sesi sebelumnya (mis. `MOVING` + `[B][C]`) tidak pernah terlihat saat boot.
+   * Jika ketiga percobaan fetch gagal, robot segera mem-publish `error(req_id = 0, FETCH_FAILED)` dan `status = ERROR`; `graph_version` tetap `0` dan tidak ada retry otomatis (reset atau reboot mengulang fetch, §7.3.2).
 
 2. **Menerima `moveto`**
    * `Task MQTT` hanya menerima jika status `IDLE`, mailbox kosong, graf sudah siap, dan kapasitas sampah di bawah ambang penuh.
@@ -58,7 +58,7 @@ Firmware dijalankan menggunakan Sistem Operasi Real-Time (**FreeRTOS**) pada mik
    * `Task Executor` mengambil alih path array, mem-publish `status = MOVING`, lalu mulai bergerak.
    * Saat memulai setiap edge, publish `current_pos = [from][to]`.
    * Saat tiba di node, publish `current_pos = [node][next]`; jika masih ada edge berikutnya, `next` adalah node berikutnya; jika sudah di target, `next = 0`.
-   * Setelah tiba di target, buka tutup, publish `status = DWELL`, jalankan timer, lalu tutup dan publish `status = IDLE` serta `current_pos = [target][0]`.
+   * Setelah tiba di target, publish `status = DWELL` dan `current_pos = [target][0]`, buka tutup, lalu jalankan timer. Setelah tutup ditutup, publish `adam/srv/trash`, lalu `status = IDLE` dan `current_pos = [target][0]`; bila sampah penuh, robot lanjut auto-park ke Home.
    * Robot **tidak** mengambil job berikutnya sendiri. Gateway akan mengirim `moveto` berikutnya setelah menerima `IDLE` dan versi graf cocok.
 
 5. **Siklus graf**
@@ -137,5 +137,5 @@ Kadensi telemetri **event-driven**: `status` saat berubah; `current_pos` saat mu
 * **Anti false-arrival**: setelah tiba di satu node, color marker (atau pola cabang pada jalur fallback) harus menghilang dari pandangan sensor sebelum node berikutnya boleh terdeteksi. Latch ini juga aktif saat start/reset karena robot masih berdiri di marker Home.
 * **Batas waktu per edge (`NODE_TIMEOUT`)**: bobot edge adalah jarak relatif/estimasi waktu tempuh (1–63, lihat [02-graph.md](02-graph.md)), jadi deadline tidak memakai satu angka tetap. Firmware memakai `STEP_TIMEOUT_BASE_MS` (default **10 detik**, untuk manuver belok dan margin) ditambah `weight × STEP_TIMEOUT_PER_WEIGHT_MS` (default **1 detik per bobot**). Contoh: edge bobot 1 mendapat 11 detik, bobot 47 mendapat 57 detik. Jika node berikutnya belum terdeteksi sampai deadline, firmware mem-publish `error(req_id, NODE_TIMEOUT)` dan masuk `ERROR`.
 * **Ack dan error tidak boleh tertukar**: `ack` hanya untuk penerimaan job; kegagalan navigasi selalu lewat `error` dengan `req_id` yang sama.
-* **Auto-park saat sampah penuh**: setiap transisi ke `IDLE`, firmware membaca kapasitas sampah; jika `sensors_trash_level_percent() >= SENSORS_TRASH_FULL_PERCENT`, robot langsung menghitung rute ke `A` dan bergerak ke sana dengan telemetri `MOVING`/`current_pos` biasa (job internal: tanpa `moveto`, tanpa `ack`, tanpa `req_id`), lalu menunggu `IDLE` di `A`. Pengosongan wadah dilakukan di Home; setelah wadah dikosongkan, admin mereset agar retained `trash` segar.
+* **Auto-park saat sampah penuh**: setelah dwell normal selesai (atau setelah perjalanan internal auto-park sebelumnya), firmware membaca kapasitas sampah; jika `sensors_trash_level_percent() >= SENSORS_TRASH_FULL_PERCENT`, robot langsung menghitung rute ke `A` dan bergerak ke sana dengan telemetri `MOVING`/`current_pos` biasa (job internal: tanpa `moveto`, tanpa `ack`, tanpa `req_id`), lalu menunggu `IDLE` di `A`. Pengosongan wadah dilakukan di Home; setelah wadah dikosongkan, admin mereset agar retained `trash` segar.
 * **Batas dwell total**: `DWELL_TOTAL_MAX_MS` (default **60 detik**) membatasi total waktu dwell dalam satu pemberhentian, walau sensor IR tangan terus mereset timer. Setelah batas tercapai, tutup ditutup dan robot mem-publish `trash` + `IDLE` seperti biasa — robot tidak dapat terkunci di `DWELL` selamanya dan pintu reset tetap terbuka. Robot harus singkat berhenti di tiap node (prinsip keadilan lift; antrean gateway FIFO).

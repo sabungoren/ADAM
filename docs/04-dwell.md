@@ -13,7 +13,7 @@ Saat robot tiba di Node tujuan panggilan:
 3. **Penyelesaian Task**:
    * Jika **timer habis** dan **tidak ada lagi tangan** yang terdeteksi, tempat sampah otomatis menutup.
    * Robot mem-publish `adam/srv/trash` (kapasitas diukur setelah penutup ditutup), `status = IDLE`, dan `current_pos = [node][0]`, lalu **menunggu gateway**.
-   * **Auto-park saat penuh**: jika kapasitas ≥ ambang penuh (`SENSORS_TRASH_FULL_PERCENT`, 95%) saat robot kembali `IDLE`, robot langsung bergerak ke Home `A` (lihat [docs/07-firmware.md](07-firmware.md) §7.6) sehingga wadah selalu dapat dikosongkan di Home. Setelah wadah dikosongkan, admin mengirim reset agar telemetri `trash` segar.
+   * **Auto-park saat penuh**: setelah dwell normal selesai (atau setelah perjalanan internal sebelumnya), jika kapasitas ≥ ambang penuh (`SENSORS_TRASH_FULL_PERCENT`, 95%), robot langsung bergerak ke Home `A` (lihat [docs/07-firmware.md](07-firmware.md) §7.6) sehingga wadah selalu dapat dikosongkan di Home. Setelah wadah dikosongkan, admin mengirim reset agar telemetri `trash` segar.
    * Gateway yang memiliki antrean akan mengirim job berikutnya setelah menerima `IDLE` dan versi graf robot cocok. Jika antrean kosong, robot tetap `IDLE` sampai ada panggilan baru. Robot tidak mengambil target berikutnya sendiri — pengecualian tunggalnya adalah auto-park saat sampah penuh.
 
 ## 4.1 Sensor Kapasitas Sampah

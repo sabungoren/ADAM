@@ -450,7 +450,7 @@ Kadensi bersifat **event-driven**: `status` dikirim saat berubah; `current_pos` 
 
 `status` retained hanya untuk tampilan last-known. Gateway tetap mewajibkan heartbeat fresh (maksimal 30 detik) sebelum dispatch, dan tidak menganggap retained status sebagai bukti kesiapan.
 
-Saat boot, robot mem-publish **state netral sebelum** `online = 1`: `graph_version = 0`, `current_pos = [A][0]`, dan `status = IDLE` (retain) — retained sesi sebelumnya (mis. `MOVING` + `[B][C]`) tidak pernah terlihat saat boot. Setelah itu `online = 1`, lalu robot mengunduh graf. Jika fetch sukses, robot mem-publish versi sebenarnya plus `battery`/`trash`. Jika fetch gagal setelah 3 percobaan, robot mem-publish `adam/srv/error` `FETCH_FAILED` (`req_id = 0`) dan `status = ERROR` dan tetap `graph_version = 0`; tidak ada retry otomatis — reset atau reboot mengulang fetch. `graph_version = 0` menahan dispatch selama window boot, sehingga gateway tidak pernah menganggap robot siap padahal graf belum dimuat.
+Saat boot, firmware menyelesaikan unduhan graf lebih dulu sebelum MQTT connect: `Task Fetch` berjalan setelah WiFi diinisialisasi (dan menunggu IP hingga 30 detik), lalu `mqtt_app_start()` menunggu fetch selesai. Saat connect, robot mem-publish **`graph_version` lebih dulu** (versi hasil fetch, atau `0` bila fetch gagal), lalu snapshot telemetri (`current_pos = [A][0]`, `status = IDLE`), lalu `online = 1`, lalu `battery`/`trash` — dengan urutan ini retained sesi sebelumnya (mis. `MOVING` + `[B][C]`) tidak pernah terlihat dan `graph_version` sudah final saat robot online. Jika fetch sukses, `graph_version` berisi versi sebenarnya. Jika fetch gagal setelah 3 percobaan, `graph_version = 0` dan robot segera mem-publish `adam/srv/error` `FETCH_FAILED` (`req_id = 0`) serta `status = ERROR`; tidak ada retry otomatis — reset atau reboot mengulang fetch. `graph_version = 0` menahan dispatch, sehingga gateway tidak pernah menganggap robot siap padahal graf belum dimuat.
 
 ### Kode `adam/srv/ack`
 
@@ -520,4 +520,4 @@ Tidak ada user anonymous. Password MQTT disimpan di secret gateway dan NVS robot
 
 ### Referensi Implementasi Target
 
-Firmware: `src/graph.c` (matriks tetap 26 × 26, dimuat sekali saat boot), `src/mqtt.h` (enum status/error/ack, topik), `src/mqtt.c` (koneksi WSS, clean session, ack, LWT), `src/executor.c` (status, error, current/next), `src/path_resolver.c` (Dijkstra saat job dieksekusi). Gateway: decoder `req_id`/payload, antrean SQLite, version gate graf, bridge SSE.
+Firmware: `src/graph.c` (matriks tetap 26 × 26, dimuat sekali saat boot), `src/protocol.h` (enum status/error/ack), `src/mqtt.h` (topik), `src/mqtt.c` (koneksi WSS, clean session, ack, LWT), `src/executor.c` (status, error, current/next), `src/path_resolver.c` (Dijkstra saat job dieksekusi). Gateway: decoder `req_id`/payload, antrean SQLite, version gate graf, bridge SSE.

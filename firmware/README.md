@@ -93,17 +93,17 @@ Jika ada lebih dari satu board, tentukan port seperti pada bagian [Port serial](
 Log yang menandakan boot dan koneksi berhasil kira-kira seperti ini:
 
 ```text
-I (...) main: Startup..
-I (...) wifi station: got ip:192.168.1.10
-I (...) graph_fetch: graph v1 installed: 676 bytes
-I (...) mqtt: MQTT_EVENT_CONNECTED
+I (...) main: Startup...
+I (...) wifi: Got IP: 192.168.1.10
+I (...) graph_fetch: Graph v1 installed: 676 bytes
+I (...) mqtt: MQTT connected
 ```
 
 Jika muncul pesan seperti berikut, NVS belum berisi kredensial yang benar:
 
 ```text
-E (...) wifi station: No SSID in NVS - flash the NVS partition first
-E (...) mqtt: Failed to open nvs namespace mqtt: ESP_ERR_NVS_NOT_FOUND
+E (...) wifi: No SSID in NVS - flash the NVS partition first
+E (...) mqtt: Failed to open NVS namespace mqtt: ESP_ERR_NVS_NOT_FOUND
 ```
 
 Setelah firmware online, telemetri robot juga bisa dilihat dari dashboard web gateway. Untuk debug tingkat firmware, gunakan monitor serial di atas.

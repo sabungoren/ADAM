@@ -7,7 +7,7 @@
 #include <stddef.h>
 
 // Max nodes per navigation path: a graph holds at most 26 labels 'A'..'Z'
-// (docs/02-graph.md 2.1); a bigger graph is rejected by the Route Finder.
+// (spec 02.1); a bigger graph is rejected by the Route Finder.
 #define NAV_MAX_NODES 26
 
 // One path ready to execute: node indexes A.., its length and the job behind it
@@ -24,13 +24,13 @@ esp_err_t path_resolver_init(void);
 bool path_resolver_get_nav(nav_path_t* out);
 
 // The Task Executor reports the real arrival on a node (the actual position
-// used for the next Dijkstra calculation - spec 7.2)
+// used for the next Dijkstra calculation, spec 07.2)
 void path_resolver_set_current(size_t node);
 
 // Current confirmed node (0 = 'A')
 size_t path_resolver_current(void);
 
-// Flush the path queue (called by the Task Executor on LINE_LOST, spec 7.2)
+// Flush the path queue (called by the Task Executor on LINE_LOST, spec 07.2)
 void path_resolver_flush_paths(void);
 
 #endif // SRC_PATH_RESOLVER_H
