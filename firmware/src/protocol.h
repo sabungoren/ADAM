@@ -4,10 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Wire types of the protocol (docs/06-protocol.md), shared by executor, Task
- * Route Finder and MQTT. Topics + publish API stay in mqtt.h. Payloads are raw
- * bytes: append-only codes, 0 = NONE/UNKNOWN, unknown codes are ignored. */
-
 typedef enum {
     ADAM_STATUS_IDLE = 0,
     ADAM_STATUS_MOVING = 1,
@@ -33,14 +29,13 @@ typedef enum {
     ADAM_ERR_LINE_LOST = 2,
     ADAM_ERR_NODE_TIMEOUT = 3,
     ADAM_ERR_INVALID_TARGET = 4,
-    // GET /graph.bin failed after all retries (boot or reset); version stays 0
-    // (06 §6.4, append-only)
     ADAM_ERR_FETCH_FAILED = 5,
 } adam_error_t;
 
-// [req_id:2 little-endian][byte:1]; req_id 0x0000 is reserved (06-protocol.md)
+// [req_id:2 little-endian][byte:1]; req_id 0x0000 is reserved (spec 06.4)
 typedef struct {
     uint16_t id;
+    // Byte payload; the union member names the message it carries
     union {
         uint8_t data;
         uint8_t result; // ack: [req_id][result]
@@ -49,8 +44,8 @@ typedef struct {
     };
 } adam_req_t;
 
-// One command from the gateway: target node (docs/06-protocol.md). internal =
-// firmware-generated auto-park to Home when the bin is full (07 §7.6): no
+// One command from the gateway: target node (spec 06.4). internal =
+// firmware-generated auto-park to Home when the bin is full (spec 07.6): no
 // ack/req_id is sent for it and the robot skips the dwell at Home.
 typedef struct {
     adam_req_t req;
