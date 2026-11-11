@@ -34,8 +34,8 @@ static inline int64_t dwell_now_ms(void) {
     return esp_timer_get_time() / 1000;
 }
 
-// Write a servo angle from 0 to 180 degrees (pulse width 500-2400 us)
-static void servo_write_deg(int deg) {
+// Set the lid servo angle, 0 to 180 degrees (pulse width 500-2400 us)
+static void servo_set_angle(int deg) {
     if (deg < 0) {
         deg = 0;
     }
@@ -74,24 +74,24 @@ esp_err_t dwell_init(void) {
     };
     ESP_RETURN_ON_ERROR(ledc_channel_config(&chan), TAG, "servo ledc channel failed");
 
-    servo_write_deg(DWELL_SERVO_CLOSE_DEG);
+    servo_set_angle(DWELL_SERVO_CLOSE_DEG);
     ESP_LOGI(TAG, "Lid servo ready (pin %d, %d Hz, %d-%d us)", DWELL_SERVO_PIN, DWELL_SERVO_FREQ_HZ, DWELL_SERVO_MIN_US,
              DWELL_SERVO_MAX_US);
     return ESP_OK;
 }
 
 void dwell_close_lid(void) {
-    servo_write_deg(DWELL_SERVO_CLOSE_DEG);
+    servo_set_angle(DWELL_SERVO_CLOSE_DEG);
 }
 
 void dwell_run(void) {
     ESP_LOGI(TAG, "Opening lid");
-    servo_write_deg(DWELL_SERVO_OPEN_DEG);
+    servo_set_angle(DWELL_SERVO_OPEN_DEG);
 
     // Arrival notification: 2 short beeps
-    sensors_buzzer_beep(80);
+    sensors_beep(80);
     vTaskDelay(pdMS_TO_TICKS(50));
-    sensors_buzzer_beep(80);
+    sensors_beep(80);
 
     int64_t dwell_start = dwell_now_ms();
     int64_t total_start = dwell_start;
@@ -106,7 +106,7 @@ void dwell_run(void) {
             break;
         }
 
-        if (sensors_hand_detected()) {
+        if (sensors_is_hand_detected()) {
             dwell_start = dwell_now_ms();
         }
 
@@ -118,9 +118,9 @@ void dwell_run(void) {
     } else {
         ESP_LOGI(TAG, "Closing lid");
     }
-    servo_write_deg(DWELL_SERVO_CLOSE_DEG);
+    servo_set_angle(DWELL_SERVO_CLOSE_DEG);
 
     // Dwell finished notification. The caller (Task Executor) republishes the
     // trash capacity right after this returns, once the lid is closed again.
-    sensors_buzzer_beep(120);
+    sensors_beep(120);
 }

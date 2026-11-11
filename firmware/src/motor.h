@@ -2,6 +2,7 @@
 #define SRC_MOTOR_H
 
 #include "esp_err.h"
+#include "graph.h"
 #include <stdint.h>
 
 // L298N motor driver pins (docs/08-pins.md)
@@ -18,19 +19,25 @@
 // Maximum PWM duty per wheel (matches the 8-bit resolution)
 #define MOTOR_SPEED_MAX 255
 
+// Initialize the L298N direction pins and PWM channels, halt both wheels and
+// reset the heading to north (spec 03.1)
+// @return ESP_OK on success
 esp_err_t motor_init(void);
 
-// Set the speed of each wheel, -255..255 (negative = backward)
+// Set the speed of each wheel
+// @param left left wheel speed, -255..255 (negative = backward)
+// @param right right wheel speed, -255..255 (negative = backward)
 void motor_set_speed(int left, int right);
 
 // Stop immediately (all direction pins low + duty 0)
 void motor_halt(void);
 
-// Current heading (DIR_NORTH / DIR_EAST / DIR_SOUTH / DIR_WEST from graph.h)
-uint8_t motor_heading(void);
+// @return current motor heading
+dir_t motor_get_heading(void);
 
 // Turn the robot on the spot until it faces the target heading (spec 03.2).
 // Blocking: the robot stays in place while turning.
-void motor_turn_to_heading(uint8_t target_dir);
+// @param target_dir heading to face
+void motor_turn_to_heading(dir_t target_dir);
 
 #endif // SRC_MOTOR_H

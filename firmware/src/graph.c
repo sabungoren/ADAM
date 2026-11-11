@@ -44,23 +44,7 @@ bool graph_ready(void) {
     return graph_version() != 0 && graph_get(&edges);
 }
 
-// Weighted undirected graph, anti-symmetric direction (spec 02.1):
-// if i -> j is stored with direction D, then j -> i is stored with
-// direction (D + 2) mod 4 and the same weight.
-//
-// Layout (col, row), row 0 = north side:
-//   A(0,0) B(1,0) C(2,0) D(3,0)
-//   E(0,1) F(1,1) G(2,1) H(3,1)
-//   I(0,2) J(1,2) K(2,2) L(3,2)
-//   M(0,3) N(1,3) O(2,3) P(3,3) Q(4,3) R(5,3)
-//   S(5,2)
-// Rule: max ONE edge per compass direction per node, so a stored
-// direction is always unambiguous for the robot (spec 02).
-// Notes: no C-G, F-J, K-O lanes (holes); S is a dead end; K is a hub.
 // clang-format off
-// Flat row-major matrix: graph[from * 26 + to]. A row MUST be 26 bytes wide:
-// C no longer pads short rows to 26 the way it did when this was [26][26].
-// Columns T..Z are always zero (only 19 nodes are active).
 const uint8_t dummy_graph[GRAPH_SIZE] = {
 // A                              B                              C                              D                              E                              F                              G                              H                              I                              J                              K                              L                              M                              N                              O                              P                              Q                              R                              S                              T  U  V  W  X  Y  Z
      0, EDGE_ENCODE(3, DIR_EAST), 0, 0, EDGE_ENCODE(9, DIR_SOUTH), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // A

@@ -22,7 +22,7 @@
 
 static const char* TAG = "executor";
 
-// s_state = what the task loop is doing, s_published_status = last published wire code
+// s_state = what the task loop is doing, s_last_published_status = last published wire code
 // (adam_status_t). OBSTACLE is reserved and no longer emitted.
 // STATE_DWELL keeps "serving at the lid" distinct from STATE_IDLE so internal
 // code can tell an idle robot from one that is still in its dwell window.
@@ -38,13 +38,13 @@ typedef struct {
     adam_status_t status;
     uint8_t current_pos[2];
 } executor_telemetry_t;
-static portMUX_TYPE s_telemetry_mux = portMUX_INITIALIZER_UNLOCKED;
-static SemaphoreHandle_t s_telemetry_publish_mutex;
+static portMUX_TYPE s_telemetry_lock = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t s_publish_mutex;
 static executor_telemetry_t s_telemetry = {
     .status = ADAM_STATUS_IDLE,
     .current_pos = {'A', 0},
 };
-static int s_published_status = -1;
+static int s_last_published_status = -1;
 // next < 0 = no next node; see publish_state()
 #define POS_NEXT_NONE (-1)
 static void publish_state(size_t current, int next, adam_status_t status);
@@ -75,16 +75,16 @@ static void publish_error(uint16_t req_id, adam_error_t reason);
 #define STEP_TIMEOUT_BASE_MS 10000
 #define STEP_TIMEOUT_PER_WEIGHT_MS 1000
 
-static nav_path_t s_nav;
-static size_t s_step = 0;
+static nav_path_t s_nav_path;
+static size_t s_step_index = 0;
 
-static float s_last_error = 0.0f;
+static float s_last_line_error = 0.0f;
 
 // Node detection counters (spec 02.3): consecutive color-marker samples, and
 // consecutive branch patterns for the fallback path.
-static int s_marker_run = 0;
-static int s_branch_run = 0;
-static int64_t s_marker_next_ms = 0;
+static int s_marker_streak = 0;
+static int s_branch_streak = 0;
+static int64_t s_next_marker_sample_ms = 0;
 
 static inline int64_t now_ms(void) {
     return esp_timer_get_time() / 1000;
@@ -92,8 +92,8 @@ static inline int64_t now_ms(void) {
 
 static int64_t s_step_deadline = 0;
 static int64_t s_step_started_ms = 0;
-static int32_t s_step_timeout_ms = 0;
-static int64_t s_no_line_since = -1;
+static int32_t s_step_budget_ms = 0;
+static int64_t s_line_lost_since_ms = -1;
 // True only while the robot is actually following the line. It stays false
 // during the in-place turn at a node, so the sensor mock does not consume the
 // new edge's non-node lead-in while the robot is still rotating. Without this,
@@ -105,7 +105,7 @@ static volatile bool s_line_active = false;
 // on the fallback path) has to leave the sensor view before the next node may
 // be detected. Starts true: at boot/reset the robot sits on Home's marker, so
 // that marker must clear before the first node of the ride is reported.
-static bool s_wait_clear = true;
+static bool s_wait_marker_clear = true;
 
 // Serial log name only - never sent on the wire (docs/06-protocol.md)
 static const char* err_name(adam_error_t err) {
@@ -124,9 +124,9 @@ static const char* err_name(adam_error_t err) {
 }
 
 adam_status_t executor_status(void) {
-    portENTER_CRITICAL(&s_telemetry_mux);
+    portENTER_CRITICAL(&s_telemetry_lock);
     adam_status_t status = s_telemetry.status;
-    portEXIT_CRITICAL(&s_telemetry_mux);
+    portEXIT_CRITICAL(&s_telemetry_lock);
     return status;
 }
 
@@ -135,35 +135,36 @@ adam_status_t executor_status(void) {
 // the real graph (sensors.c). Read-only peek at the executor's navigation
 // state; only compiled into mock builds.
 bool executor_active_edge(size_t* from, size_t* to) {
-    if (s_state != STATE_MOVING || !s_line_active || s_step == 0 || s_step >= s_nav.len) {
+    if (s_state != STATE_MOVING || !s_line_active || s_step_index == 0 || s_step_index >= s_nav_path.len) {
         return false;
     }
-    *from = s_nav.path[s_step - 1];
-    *to = s_nav.path[s_step];
+    *from = s_nav_path.path[s_step_index - 1];
+    *to = s_nav_path.path[s_step_index];
     return true;
 }
 #endif
 
 void executor_publish_telemetry(void) {
-    if (s_telemetry_publish_mutex == NULL) {
+    if (s_publish_mutex == NULL) {
         return;
     }
 
-    xSemaphoreTake(s_telemetry_publish_mutex, portMAX_DELAY);
-    portENTER_CRITICAL(&s_telemetry_mux);
+    xSemaphoreTake(s_publish_mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&s_telemetry_lock);
     executor_telemetry_t snapshot = s_telemetry;
-    portEXIT_CRITICAL(&s_telemetry_mux);
+    portEXIT_CRITICAL(&s_telemetry_lock);
 
     mqtt_publish(MQTT_CURRENT_POS_TOPIC, (const char*)snapshot.current_pos, sizeof(snapshot.current_pos), 1, true);
     mqtt_publish_u8(MQTT_STATUS_TOPIC, (uint8_t)snapshot.status, 1, true);
-    xSemaphoreGive(s_telemetry_publish_mutex);
+    xSemaphoreGive(s_publish_mutex);
 }
 
 // Boot status (spec 07.2): before online = 1 the connect handler has already
-// published the telemetry snapshot; here the boot decision is settled - ERROR
+// published the telemetry snapshot; here the boot decision settles - ERROR
 // (with the FETCH_FAILED error) when every attempt failed, IDLE once the graph
-// is installed. Returns true when settled and the task loop may run.
-static bool boot_status_settle(void) {
+// is installed.
+// @return true when settled and the task loop may run
+static bool wait_boot_status(void) {
     // Query graph_fetch's own state instead of having it push state to us.
     // graph_fetch owns the "fetch failed" state, so we pull it from there.
     if (!graph_fetch_success()) {
@@ -191,28 +192,28 @@ static void publish_state(size_t current, int next, adam_status_t status) {
     uint8_t pos[2] = {(uint8_t)(current + 'A'), (uint8_t)(next >= 0 ? next + 'A' : 0)};
     bool status_changed;
 
-    xSemaphoreTake(s_telemetry_publish_mutex, portMAX_DELAY);
-    portENTER_CRITICAL(&s_telemetry_mux);
-    status_changed = s_published_status != (int)status;
+    xSemaphoreTake(s_publish_mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&s_telemetry_lock);
+    status_changed = s_last_published_status != (int)status;
     s_telemetry.status = status;
     s_telemetry.current_pos[0] = pos[0];
     s_telemetry.current_pos[1] = pos[1];
     if (status_changed) {
-        s_published_status = (int)status;
+        s_last_published_status = (int)status;
     }
-    portEXIT_CRITICAL(&s_telemetry_mux);
+    portEXIT_CRITICAL(&s_telemetry_lock);
 
     mqtt_publish(MQTT_CURRENT_POS_TOPIC, (const char*)pos, sizeof(pos), 1, true);
     if (status_changed) {
         mqtt_publish_u8(MQTT_STATUS_TOPIC, (uint8_t)status, 1, true);
     }
-    xSemaphoreGive(s_telemetry_publish_mutex);
+    xSemaphoreGive(s_publish_mutex);
 }
 
 // Publish trash right after the lid closes (spec 07.4, 04); at boot it goes out
 // through the MQTT connect handler.
 static void publish_trash(void) {
-    uint8_t trash = sensors_trash_level_percent();
+    uint8_t trash = sensors_get_trash_level_percent();
     mqtt_publish_u8(MQTT_TRASH_TOPIC, trash, 1, true);
 }
 
@@ -225,7 +226,7 @@ static void maybe_auto_park(void) {
     if (path_resolver_current() == 0) {
         return;
     }
-    uint8_t trash = sensors_trash_level_percent();
+    uint8_t trash = sensors_get_trash_level_percent();
     if (trash < SENSORS_TRASH_FULL_PERCENT) {
         return;
     }
@@ -288,7 +289,7 @@ void executor_set_error(uint16_t req_id, adam_error_t reason) {
 }
 
 // Raised by the MQTT task when an admin reset is accepted (spec 07.3.2). Only a
-// flag: the executor loop is the sole writer of s_nav/s_state, so a cross-task
+// flag: the executor loop is the sole writer of s_nav_path/s_state, so a cross-task
 // request can never race the navigation state.
 static volatile bool s_reset_pending = false;
 
@@ -310,12 +311,12 @@ static void perform_reset(void) {
     dwell_close_lid();
     path_resolver_flush_paths();
     mqtt_flush_jobs();
-    s_nav.len = 0;
-    s_step = 0;
-    s_marker_run = 0;
-    s_branch_run = 0;
-    s_wait_clear = true;
-    s_last_error = 0.0f;
+    s_nav_path.len = 0;
+    s_step_index = 0;
+    s_marker_streak = 0;
+    s_branch_streak = 0;
+    s_wait_marker_clear = true;
+    s_last_line_error = 0.0f;
 
     path_resolver_set_current(0);
     motor_turn_to_heading(DIR_NORTH);
@@ -329,10 +330,10 @@ static void perform_reset(void) {
     mqtt_publish_graph_version(0);
     if (graph_fetch_rerun()) {
         // Republish the full retained telemetry even if nothing changed.
-        s_published_status = -1; // force the status out again
+        s_last_published_status = -1; // force the status out again
         publish_state(0, POS_NEXT_NONE, ADAM_STATUS_IDLE);
-        uint8_t battery = sensors_battery_percent();
-        uint8_t trash = sensors_trash_level_percent();
+        uint8_t battery = sensors_get_battery_percent();
+        uint8_t trash = sensors_get_trash_level_percent();
         mqtt_publish_u8(MQTT_BATTERY_TOPIC, battery, 1, true);
         mqtt_publish_u8(MQTT_TRASH_TOPIC, trash, 1, true);
         s_state = STATE_IDLE;
@@ -345,13 +346,13 @@ static void perform_reset(void) {
     }
 }
 
-// Turn onto the edge direction and reset the deadline (spec 03.2). Returns false
-// when the edge is not valid in the current graph.
+// Turn onto the edge direction and reset the deadline (spec 03.2)
+// @return false when the edge is not valid in the current graph
 static bool move_begin_step(void) {
     s_line_active = false;
 
-    size_t from = s_nav.path[s_step - 1];
-    size_t to = s_nav.path[s_step];
+    size_t from = s_nav_path.path[s_step_index - 1];
+    size_t to = s_nav_path.path[s_step_index];
 
     const uint8_t* edges;
     if (!graph_get(&edges)) {
@@ -363,22 +364,22 @@ static bool move_begin_step(void) {
         return false;
     }
 
-    motor_turn_to_heading(EDGE_DIR(edge));
+    motor_turn_to_heading((dir_t)EDGE_DIR(edge));
     s_state = STATE_MOVING;
 
     // Edge start enters MOVING; update status and current_pos atomically (spec 07.4).
     publish_state(from, (int)to, ADAM_STATUS_MOVING);
 
     // Per-edge deadline: fixed base plus one second per weight unit
-    s_step_timeout_ms = STEP_TIMEOUT_BASE_MS + ((int32_t)EDGE_WEIGHT(edge) * STEP_TIMEOUT_PER_WEIGHT_MS);
+    s_step_budget_ms = STEP_TIMEOUT_BASE_MS + ((int32_t)EDGE_WEIGHT(edge) * STEP_TIMEOUT_PER_WEIGHT_MS);
     s_step_started_ms = now_ms();
-    s_step_deadline = s_step_started_ms + s_step_timeout_ms;
-    s_no_line_since = -1;
-    s_last_error = 0.0f;
+    s_step_deadline = s_step_started_ms + s_step_budget_ms;
+    s_line_lost_since_ms = -1;
+    s_last_line_error = 0.0f;
 
-    ESP_LOGI(TAG, "Step %d/%d: %c -> %c dir %s weight %u (timeout %d ms)", (int)s_step, (int)s_nav.len - 1,
+    ESP_LOGI(TAG, "Step %d/%d: %c -> %c dir %s weight %u (timeout %d ms)", (int)s_step_index, (int)s_nav_path.len - 1,
              (int)(from + 'A'), (int)(to + 'A'), STR_DIR[EDGE_DIR(edge)], (unsigned)EDGE_WEIGHT(edge),
-             (int)s_step_timeout_ms);
+             (int)s_step_budget_ms);
 
     // Let the mock start the new edge only now: the turn and the telemetry
     // publish above must not eat the edge's non-node lead-in.
@@ -386,7 +387,8 @@ static bool move_begin_step(void) {
     return true;
 }
 
-// Line pattern summary: 3-bit mask of the BFD-1000 channels (bit0=left, bit1=mid, bit2=right)
+// Line pattern summary of the BFD-1000 channels
+// @return 3-bit mask (bit0 = left, bit1 = mid, bit2 = right)
 static inline int line_pattern(const int line[SENSORS_LINE_COUNT]) {
     int pattern = 0;
     for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
@@ -395,7 +397,8 @@ static inline int line_pattern(const int line[SENSORS_LINE_COUNT]) {
     return pattern;
 }
 
-// Line error -1..1 from the active sensor positions (-2..+2, normalized by 2)
+// Weighted line error from the active sensor positions
+// @return error -1..1 (sensor positions -2..+2, normalized by 2)
 static float line_error(const int line[SENSORS_LINE_COUNT]) {
     static const int weight[SENSORS_LINE_COUNT] = {-2, 0, 2};
     int sum = 0;
@@ -408,7 +411,7 @@ static float line_error(const int line[SENSORS_LINE_COUNT]) {
         }
     }
     if (count == 0) {
-        return s_last_error;
+        return s_last_line_error;
     }
     return ((float)sum / (float)count) / 2.0f;
 }
@@ -416,72 +419,72 @@ static float line_error(const int line[SENSORS_LINE_COUNT]) {
 // One MOVING iteration: PID, node detection, LINE_LOST, timeout
 static void moving_tick(void) {
     int line[SENSORS_LINE_COUNT];
-    sensors_line_read(line);
+    sensors_read_line(line);
     int pattern = line_pattern(line);
 
     // LINE_LOST (spec 07.2): no sensor sees the line
     if (pattern == 0) {
-        if (s_no_line_since < 0) {
-            s_no_line_since = now_ms();
-        } else if (now_ms() - s_no_line_since > LINE_LOST_MS) {
+        if (s_line_lost_since_ms < 0) {
+            s_line_lost_since_ms = now_ms();
+        } else if (now_ms() - s_line_lost_since_ms > LINE_LOST_MS) {
             ESP_LOGE(TAG, "Line lost (3 sensors blank > %d ms)", LINE_LOST_MS);
-            executor_set_error(s_nav.job.req.id, ADAM_ERR_LINE_LOST);
+            executor_set_error(s_nav_path.job.req.id, ADAM_ERR_LINE_LOST);
             return;
         }
     } else {
-        s_no_line_since = -1;
+        s_line_lost_since_ms = -1;
     }
 
     // PID line follower: weighted line error -1..1 with differential steering
     float error = line_error(line);
 
-    float p = PID_KP * error;
-    float d = PID_KD * (error - s_last_error);
-    s_last_error = error;
+    float p_term = PID_KP * error;
+    float d_term = PID_KD * (error - s_last_line_error);
+    s_last_line_error = error;
 
-    motor_set_speed(PID_BASE_SPEED - (int)(p + d), PID_BASE_SPEED + (int)(p + d));
+    motor_set_speed(PID_BASE_SPEED - (int)(p_term + d_term), PID_BASE_SPEED + (int)(p_term + d_term));
 
     // Node arrival detection (spec 02.3): the TCS3200 color marker is the
     // primary detector, so a node on a straight stretch or at a line end
     // (centre sensor only) is still found. Sample it on an interval because one
     // measurement blocks the control loop for a few ms, then debounce over
     // NODE_MARKER_RUNS.
-    if (now_ms() >= s_marker_next_ms) {
-        s_marker_next_ms = now_ms() + NODE_MARKER_SAMPLE_MS;
-        if (sensors_color_marker_present()) {
-            if (s_marker_run < NODE_MARKER_RUNS) {
-                s_marker_run++;
+    if (now_ms() >= s_next_marker_sample_ms) {
+        s_next_marker_sample_ms = now_ms() + NODE_MARKER_SAMPLE_MS;
+        if (sensors_is_color_marker_present()) {
+            if (s_marker_streak < NODE_MARKER_RUNS) {
+                s_marker_streak++;
             }
         } else {
-            s_marker_run = 0;
+            s_marker_streak = 0;
         }
     }
-    bool marker_present = (s_marker_run >= NODE_MARKER_RUNS);
+    bool marker_present = (s_marker_streak >= NODE_MARKER_RUNS);
 
     // Fallback for a dead color sensor: a branch (centre + at least one side)
     // means a node. A straight node is invisible to this path.
     bool branch = (pattern & LINE_PATTERN_CENTER) && (pattern & LINE_PATTERN_SIDES);
-    if (branch && !s_wait_clear) {
-        if (s_branch_run < NODE_BRANCH_RUNS) {
-            s_branch_run++;
+    if (branch && !s_wait_marker_clear) {
+        if (s_branch_streak < NODE_BRANCH_RUNS) {
+            s_branch_streak++;
         }
     } else {
-        s_branch_run = 0;
+        s_branch_streak = 0;
     }
 
     // After one arrival the marker (or, on the fallback path, the branch) has
     // to leave the sensors before the next node may be reported.
-    if (s_wait_clear && !marker_present && !branch) {
-        s_wait_clear = false;
+    if (s_wait_marker_clear && !marker_present && !branch) {
+        s_wait_marker_clear = false;
     }
 
     bool node_detected = false;
     bool node_via_marker = false;
-    if (!s_wait_clear) {
+    if (!s_wait_marker_clear) {
         if (marker_present) {
             node_detected = true;
             node_via_marker = true;
-        } else if (s_branch_run >= NODE_BRANCH_RUNS) {
+        } else if (s_branch_streak >= NODE_BRANCH_RUNS) {
             node_detected = true;
         }
     }
@@ -490,11 +493,11 @@ static void moving_tick(void) {
         // Step timeout: the node was not reached
         if (now_ms() > s_step_deadline) {
             ESP_LOGE(TAG,
-                     "Step %d/%d not finished in %lld ms (budget %d ms, pattern=0x%X marker_run=%d branch_run=%d "
-                     "wait_clear=%d)",
-                     (int)s_step, (int)s_nav.len - 1, (long long)(now_ms() - s_step_started_ms), (int)s_step_timeout_ms,
-                     pattern, s_marker_run, s_branch_run, (int)s_wait_clear);
-            executor_set_error(s_nav.job.req.id, ADAM_ERR_NODE_TIMEOUT);
+                     "Step %d/%d not finished in %lld ms (budget %d ms, pattern=0x%X marker_streak=%d "
+                     "branch_streak=%d wait_marker_clear=%d)",
+                     (int)s_step_index, (int)s_nav_path.len - 1, (long long)(now_ms() - s_step_started_ms),
+                     (int)s_step_budget_ms, pattern, s_marker_streak, s_branch_streak, (int)s_wait_marker_clear);
+            executor_set_error(s_nav_path.job.req.id, ADAM_ERR_NODE_TIMEOUT);
             return;
         }
         return; // not there yet, keep running the PID
@@ -505,21 +508,21 @@ static void moving_tick(void) {
     s_line_active = false;
     ESP_LOGI(TAG, "Node detected (marker: %s)", node_via_marker ? "TCS3200 color" : "line branch fallback");
 
-    size_t to = s_nav.path[s_step];
-    s_marker_run = 0;
-    s_branch_run = 0;
-    s_wait_clear = true;
+    size_t to = s_nav_path.path[s_step_index];
+    s_marker_streak = 0;
+    s_branch_streak = 0;
+    s_wait_marker_clear = true;
     path_resolver_set_current(to);
-    s_step++;
+    s_step_index++;
 
     // Home (Node A): face north again (spec 03.1, 07.2)
     if (to == 0) {
         motor_turn_to_heading(DIR_NORTH);
     }
 
-    if (s_step >= s_nav.len) {
+    if (s_step_index >= s_nav_path.len) {
         // Path finished; publish the destination with its settled status directly.
-        if (s_nav.job.internal) {
+        if (s_nav_path.job.internal) {
             // Auto-park (spec 07.6): no dwell on the internal ride home, settle
             // straight back to IDLE at Home.
             publish_state(to, POS_NEXT_NONE, ADAM_STATUS_IDLE);
@@ -535,12 +538,12 @@ static void moving_tick(void) {
     }
 
     // Intermediate arrival remains MOVING while pointing to the next node.
-    publish_state(to, (int)s_nav.path[s_step], ADAM_STATUS_MOVING);
+    publish_state(to, (int)s_nav_path.path[s_step_index], ADAM_STATUS_MOVING);
 
     // Start the next edge; move_begin_step publishes its [from][to] snapshot.
     // A failed edge lookup transitions to ERROR directly.
     if (!move_begin_step()) {
-        executor_set_error(s_nav.job.req.id, ADAM_ERR_NO_PATH);
+        executor_set_error(s_nav_path.job.req.id, ADAM_ERR_NO_PATH);
         return;
     }
 }
@@ -558,12 +561,12 @@ static void idle_tick(void) {
         return;
     }
 
-    s_nav = nav;
-    s_step = 1;
-    s_wait_clear = true; // do not detect a node while still on the start node
+    s_nav_path = nav;
+    s_step_index = 1;
+    s_wait_marker_clear = true; // do not detect a node while still on the start node
 
-    if (s_nav.len == 1) {
-        if (s_nav.job.internal) {
+    if (s_nav_path.len == 1) {
+        if (s_nav_path.job.internal) {
             // Auto-park while already on Home (spec 07.6): no dwell, settle
             // straight back to IDLE.
             motor_turn_to_heading(DIR_NORTH);
@@ -574,7 +577,7 @@ static void idle_tick(void) {
         }
         // Target = current position: dwell right away, without moving (spec 04)
         ESP_LOGI(TAG, "Already on the target node, dwell right away");
-        run_dwell(s_nav.path[0]);
+        run_dwell(s_nav_path.path[0]);
         return;
     }
 
@@ -583,12 +586,12 @@ static void idle_tick(void) {
     }
 }
 
-static void executor(void* pvParameters) {
+static void executor_task(void* pvParameters) {
     ESP_LOGI(TAG, "Task Executor ON: PID 100 Hz (Kp=%d, Kd=%d), core 1, prio 3", (int)PID_KP, (int)PID_KD);
 
     // No status before Task Fetch settled (spec 07.2): IDLE only with a real
     // graph, ERROR when all 3 attempts failed
-    while (!boot_status_settle()) {
+    while (!wait_boot_status()) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
@@ -638,11 +641,11 @@ static void executor(void* pvParameters) {
 }
 
 esp_err_t executor_init(void) {
-    s_telemetry_publish_mutex = xSemaphoreCreateMutex();
-    if (s_telemetry_publish_mutex == NULL) {
+    s_publish_mutex = xSemaphoreCreateMutex();
+    if (s_publish_mutex == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    if (xTaskCreatePinnedToCore(executor, "Task Executor", 4096, NULL, 3, NULL, 1) != pdPASS) {
+    if (xTaskCreatePinnedToCore(executor_task, "Task Executor", 4096, NULL, 3, NULL, 1) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;

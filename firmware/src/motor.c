@@ -20,7 +20,7 @@ static const char* TAG = "motor";
 
 // Internal robot heading (spec 03.1): always north at boot and changed
 // only through motor_turn_to_heading()
-static volatile uint8_t s_heading = DIR_NORTH;
+static volatile dir_t s_heading = DIR_NORTH;
 
 // Turn calibration: speed and duration of the 90 degree turn, the 180
 // degree turn and the settle time before and after the maneuver.
@@ -140,12 +140,12 @@ void motor_halt(void) {
     ledc_update_duty(LEDC_LOW_SPEED_MODE, MOTOR_LEDC_CH_RIGHT);
 }
 
-uint8_t motor_heading(void) {
+dir_t motor_get_heading(void) {
     return s_heading;
 }
 
-void motor_turn_to_heading(uint8_t target_dir) {
-    uint8_t target = (uint8_t)(target_dir & 0x03);
+void motor_turn_to_heading(dir_t target_dir) {
+    dir_t target = (dir_t)(target_dir & 0x03);
 
     // Delta = (Target - Current) mod 4 (spec 03.2)
     int delta = (target - s_heading + 4) % 4;

@@ -21,20 +21,33 @@
 #define MQTT_GRAPH_VERSION_TOPIC "adam/srv/graph_version" // [version:4] little-endian, retain
 #define MQTT_ONLINE_TOPIC "adam/srv/online"               // 0x00/0x01, retain, LWT 0x00
 
-// Wire types (adam_status_t, adam_ack_t, adam_error_t, adam_req_t, adam_job_t)
-// live in protocol.h: they belong to the protocol, not to this transport.
-
+// Start the MQTT client and its helper tasks (validation, telemetry); waits
+// for the boot fetch to settle first
+// @return ESP_OK on success
 esp_err_t mqtt_app_start(void);
+
+// Publish a raw payload
+// @param topic full topic string
+// @param data payload bytes
+// @param len payload length in bytes
+// @param qos QoS level, 0..2
+// @param retain true to keep the message as the last known value
 void mqtt_publish(const char* topic, const char* data, int len, int qos, int retain);
 
 // Publish a 1-byte payload (battery, trash, status, online heartbeat)
+// @param topic full topic string
+// @param data byte value to publish
+// @param qos QoS level, 0..2
+// @param retain true to keep the message as the last known value
 void mqtt_publish_u8(const char* topic, uint8_t data, int qos, int retain);
 
-// adam/srv/graph_version: 4-byte little-endian, retained, 0 = not ready
-// (the value itself is owned by graph.c, graph_version())
+// Publish the installed graph version (adam/srv/graph_version, retained)
+// @param version version to publish, 0 = not ready
 void mqtt_publish_graph_version(uint32_t version);
 
 // Get the next command (move), blocking, called by the Route Finder
+// @param job the fetched job, valid only when true is returned
+// @return true when a job was fetched
 bool mqtt_get_job_blocked(adam_job_t* job);
 
 // Flush the command queue (called on error recovery, spec 07.2)
