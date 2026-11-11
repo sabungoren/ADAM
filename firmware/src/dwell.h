@@ -13,6 +13,8 @@
 #define DWELL_SERVO_OPEN_DEG 90
 #define DWELL_SERVO_CLOSE_DEG 0
 
+// Initialize the lid servo LEDC timer and channel, then close the lid
+// @return ESP_OK on success
 esp_err_t dwell_init(void);
 
 // Close the trash lid now (spec 07.3: the lid must be closed whenever the

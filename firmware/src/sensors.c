@@ -13,7 +13,6 @@
 #include "freertos/task.h"
 #include "hal/adc_types.h"
 #include "hal/gpio_types.h"
-#include "portmacro.h"
 #include "soc/gpio_num.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -39,10 +38,10 @@ static const char* TAG = "sensors";
 // ADC1_CH0 (GPIO36) battery divider scale, 0-4095
 #    define SENSORS_ADC_MAX 4095
 
-static adc_oneshot_unit_handle_t s_adc = NULL;
+static adc_oneshot_unit_handle_t s_battery_adc = NULL;
 
 // Select the TCS3200 color filter (S2/S3) before measuring
-static esp_err_t tcs_write(int s2, int s3) {
+static esp_err_t tcs_set_channel(int s2, int s3) {
     ESP_RETURN_ON_ERROR(gpio_set_level((gpio_num_t)SENSORS_PIN_TCS_S2, s2), TAG, "S2 write failed");
     ESP_RETURN_ON_ERROR(gpio_set_level((gpio_num_t)SENSORS_PIN_TCS_S3, s3), TAG, "S3 write failed");
     // Let the internal TCS3200 filter settle before the measurement gate
@@ -107,18 +106,18 @@ esp_err_t sensors_init(void) {
     // TCS3200 output scaling 20% (S0=HIGH, S1=LOW)
     gpio_set_level((gpio_num_t)SENSORS_PIN_TCS_S0, 1);
     gpio_set_level((gpio_num_t)SENSORS_PIN_TCS_S1, 0);
-    ESP_ERROR_CHECK(tcs_write(0, 0));
+    ESP_ERROR_CHECK(tcs_set_channel(0, 0));
 
     // ADC1_CH0 (GPIO36) battery voltage divider
     const adc_oneshot_unit_init_cfg_t adc_cfg = {
         .unit_id = ADC_UNIT_1,
     };
-    ESP_RETURN_ON_ERROR(adc_oneshot_new_unit(&adc_cfg, &s_adc), TAG, "ADC unit failed");
+    ESP_RETURN_ON_ERROR(adc_oneshot_new_unit(&adc_cfg, &s_battery_adc), TAG, "ADC unit failed");
     const adc_oneshot_chan_cfg_t chan_cfg = {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
     };
-    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "ADC channel failed");
+    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_battery_adc, ADC_CHANNEL_0, &chan_cfg), TAG, "ADC channel failed");
 
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
@@ -127,7 +126,7 @@ esp_err_t sensors_init(void) {
     return ESP_OK;
 }
 
-void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
+void sensors_read_line(int line[SENSORS_LINE_COUNT]) {
     // Order: line[0]=left (GPIO39/S_LEFT), line[1]=mid (GPIO34/S_MIDDLE), line[2]=right (GPIO35/S_RIGHT)
     static const gpio_num_t pins[SENSORS_LINE_COUNT] = {
         (gpio_num_t)SENSORS_PIN_LF_LEFT,
@@ -147,22 +146,22 @@ void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
 
 // Detect a color marker on a node (spec 02.3). Red = S2 low/S3 low,
 // Green = S2 high/S3 high, Blue = S2 low/S3 high.
-bool sensors_color_marker_present(void) {
+bool sensors_is_color_marker_present(void) {
     uint32_t r;
     uint32_t g;
     uint32_t b;
 
-    if (tcs_write(0, 0) != ESP_OK) {
+    if (tcs_set_channel(0, 0) != ESP_OK) {
         return false;
     }
     r = tcs_measure_pulse_low_us();
 
-    if (tcs_write(1, 1) != ESP_OK) {
+    if (tcs_set_channel(1, 1) != ESP_OK) {
         return false;
     }
     g = tcs_measure_pulse_low_us();
 
-    if (tcs_write(0, 1) != ESP_OK) {
+    if (tcs_set_channel(0, 1) != ESP_OK) {
         return false;
     }
     b = tcs_measure_pulse_low_us();
@@ -177,7 +176,7 @@ bool sensors_color_marker_present(void) {
     return (r < TCS_BRIGHT_PULSE_US) || (g < TCS_BRIGHT_PULSE_US) || (b < TCS_BRIGHT_PULSE_US);
 }
 
-float sensors_ultrasonic_distance_cm(void) {
+float sensors_get_ultrasonic_distance_cm(void) {
     // 10 us trigger pulse (HC-SR04)
     gpio_set_level((gpio_num_t)SENSORS_PIN_US_TRIG, 0);
     esp_rom_delay_us(2);
@@ -217,8 +216,8 @@ float sensors_ultrasonic_distance_cm(void) {
     return cm;
 }
 
-uint8_t sensors_trash_level_percent(void) {
-    float cm = sensors_ultrasonic_distance_cm();
+uint8_t sensors_get_trash_level_percent(void) {
+    float cm = sensors_get_ultrasonic_distance_cm();
     float span = SENSORS_TRASH_EMPTY_CM - SENSORS_TRASH_FULL_CM;
     if (span <= 0.0f) {
         return 0;
@@ -234,14 +233,14 @@ uint8_t sensors_trash_level_percent(void) {
     return (uint8_t)(level + 0.5f);
 }
 
-bool sensors_hand_detected(void) {
+bool sensors_is_hand_detected(void) {
     // FC-51 hand sensor output: LOW = hand/object detected
     return gpio_get_level((gpio_num_t)SENSORS_PIN_HAND_IR) == 0;
 }
 
-uint8_t sensors_battery_percent(void) {
+uint8_t sensors_get_battery_percent(void) {
     int raw = 0;
-    if (s_adc == NULL || adc_oneshot_read(s_adc, ADC_CHANNEL_0, &raw) != ESP_OK) {
+    if (s_battery_adc == NULL || adc_oneshot_read(s_battery_adc, ADC_CHANNEL_0, &raw) != ESP_OK) {
         return 0;
     }
     if (raw < 0) {
@@ -253,7 +252,7 @@ uint8_t sensors_battery_percent(void) {
     return (uint8_t)((raw * 100) / SENSORS_ADC_MAX);
 }
 
-void sensors_buzzer_beep(int ms) {
+void sensors_beep(int ms) {
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 1);
     vTaskDelay(pdMS_TO_TICKS(ms));
     gpio_set_level((gpio_num_t)SENSORS_PIN_BUZZER, 0);
@@ -304,7 +303,7 @@ typedef struct {
     bool color_detected;
 } sensor_mock_state_t;
 
-static sensor_mock_state_t s_state = {
+static sensor_mock_state_t s_mock_state = {
     .line = {0, 1, 0},
     .battery = MOCK_BATTERY_START_PERCENT,
     .trash_level = MOCK_TRASH_START_PERCENT,
@@ -312,7 +311,7 @@ static sensor_mock_state_t s_state = {
     .color_detected = false,
 };
 
-static void update_sensor(void* pvParameters) {
+static void sensor_mock_task(void* pvParameters) {
     TickType_t last = xTaskGetTickCount();
     uint32_t ticks = 0;
     uint32_t edge_ticks = 0;
@@ -330,10 +329,10 @@ static void update_sensor(void* pvParameters) {
 
         if (!moving) {
             // At a node or dwelling: keep a line under the robot, unused then
-            s_state.color_detected = false;
-            s_state.line[0] = 0;
-            s_state.line[1] = 1;
-            s_state.line[2] = 0;
+            s_mock_state.color_detected = false;
+            s_mock_state.line[0] = 0;
+            s_mock_state.line[1] = 1;
+            s_mock_state.line[2] = 0;
             edge_from = (size_t)-1;
             edge_to = (size_t)-1;
             edge_ticks = 0;
@@ -352,10 +351,10 @@ static void update_sensor(void* pvParameters) {
             }
 
             if (weight == NO_EDGE) {
-                s_state.color_detected = false;
-                s_state.line[0] = 0;
-                s_state.line[1] = 0;
-                s_state.line[2] = 0;
+                s_mock_state.color_detected = false;
+                s_mock_state.line[0] = 0;
+                s_mock_state.line[1] = 0;
+                s_mock_state.line[2] = 0;
                 if (edge_ticks == 0) {
                     ESP_LOGW(TAG, "Mock: no edge %c -> %c in the graph, line lost", (int)(from + 'A'), (int)(to + 'A'));
                 }
@@ -382,10 +381,10 @@ static void update_sensor(void* pvParameters) {
                 // same window (spec 02.3). Write the marker first: the executor
                 // samples it on the first tick of the node window, so it must
                 // never see a branch pattern before the color flag is set.
-                s_state.color_detected = node_window;
-                s_state.line[0] = 0;
-                s_state.line[1] = 1;
-                s_state.line[2] = 0;
+                s_mock_state.color_detected = node_window;
+                s_mock_state.line[0] = 0;
+                s_mock_state.line[1] = 1;
+                s_mock_state.line[2] = 0;
 
                 if (node_window) {
                     // Centre is always lit at a node. Neighbours are mapped
@@ -400,9 +399,9 @@ static void update_sensor(void* pvParameters) {
                         }
                         int delta = (EDGE_DIR(e) - incoming + 4) % 4;
                         if (delta == 1) {
-                            s_state.line[2] = 1; // right branch
+                            s_mock_state.line[2] = 1; // right branch
                         } else if (delta == 3) {
-                            s_state.line[0] = 1; // left branch
+                            s_mock_state.line[0] = 1; // left branch
                         }
                     }
                 }
@@ -411,54 +410,54 @@ static void update_sensor(void* pvParameters) {
         }
 
         // Hand at the trash opening: half of the period present, half away
-        s_state.hand_detected = (ticks % (MOCK_HAND_PERIOD_TICKS * 2)) < MOCK_HAND_PERIOD_TICKS;
+        s_mock_state.hand_detected = (ticks % (MOCK_HAND_PERIOD_TICKS * 2)) < MOCK_HAND_PERIOD_TICKS;
 
-        if (ticks > 0 && (ticks % MOCK_TRASH_STEP_TICKS) == 0 && s_state.trash_level < 100) {
-            s_state.trash_level++;
+        if (ticks > 0 && (ticks % MOCK_TRASH_STEP_TICKS) == 0 && s_mock_state.trash_level < 100) {
+            s_mock_state.trash_level++;
         }
-        if (ticks > 0 && (ticks % MOCK_BATTERY_STEP_TICKS) == 0 && s_state.battery > 0) {
-            s_state.battery--;
+        if (ticks > 0 && (ticks % MOCK_BATTERY_STEP_TICKS) == 0 && s_mock_state.battery > 0) {
+            s_mock_state.battery--;
         }
         ticks++;
     }
 }
 
 esp_err_t sensors_init(void) {
-    ESP_RETURN_ON_FALSE(xTaskCreate(update_sensor, "Task Sensor Mock", 2048, NULL, 1, NULL) == pdTRUE, ESP_ERR_NO_MEM,
-                        TAG, "Failed to create sensor mock task");
+    ESP_RETURN_ON_FALSE(xTaskCreate(sensor_mock_task, "Task Sensor Mock", 2048, NULL, 1, NULL) == pdTRUE,
+                        ESP_ERR_NO_MEM, TAG, "Failed to create sensor mock task");
     ESP_LOGW(TAG, "Sensor mock active: line/node marker, hand IR, trash and battery are simulated");
     return ESP_OK;
 }
 
-void sensors_line_read(int line[SENSORS_LINE_COUNT]) {
+void sensors_read_line(int line[SENSORS_LINE_COUNT]) {
     for (int i = 0; i < SENSORS_LINE_COUNT; i++) {
-        line[i] = s_state.line[i];
+        line[i] = s_mock_state.line[i];
     }
 }
 
-bool sensors_color_marker_present(void) {
-    return s_state.color_detected;
+bool sensors_is_color_marker_present(void) {
+    return s_mock_state.color_detected;
 }
 
-float sensors_ultrasonic_distance_cm(void) {
+float sensors_get_ultrasonic_distance_cm(void) {
     // Mirror the real formula so distance and trash level always agree
     float span = SENSORS_TRASH_EMPTY_CM - SENSORS_TRASH_FULL_CM;
-    return SENSORS_TRASH_EMPTY_CM - ((float)s_state.trash_level / 100.0f) * span;
+    return SENSORS_TRASH_EMPTY_CM - ((float)s_mock_state.trash_level / 100.0f) * span;
 }
 
-uint8_t sensors_trash_level_percent(void) {
-    return s_state.trash_level;
+uint8_t sensors_get_trash_level_percent(void) {
+    return s_mock_state.trash_level;
 }
 
-bool sensors_hand_detected(void) {
-    return s_state.hand_detected;
+bool sensors_is_hand_detected(void) {
+    return s_mock_state.hand_detected;
 }
 
-uint8_t sensors_battery_percent(void) {
-    return s_state.battery;
+uint8_t sensors_get_battery_percent(void) {
+    return s_mock_state.battery;
 }
 
-void sensors_buzzer_beep(int ms) {
+void sensors_beep(int ms) {
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
 

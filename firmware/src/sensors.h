@@ -47,29 +47,36 @@
 #define SENSORS_PIN_BUZZER 2
 #define SENSORS_PIN_BATTERY_ADC 36 // GPIO36 = ADC1_CH0; channel configured in sensors.c
 
+// Initialize the sensor GPIOs, the battery ADC channel and the TCS3200 output
+// scaling (mock builds start the sensor mock task instead)
+// @return ESP_OK on success
 esp_err_t sensors_init(void);
 
 // Read the 3 BFD-1000 channels (left, middle, right): 1 = line detected
-void sensors_line_read(int line[SENSORS_LINE_COUNT]);
+// @param line the array to write the sensor data
+void sensors_read_line(int line[SENSORS_LINE_COUNT]);
 
 // Detect a bright color marker under the robot (= node, spec 02.3).
 // Measures the pulse width of every RGB channel and reports whether one
-// of them is bright enough. false on a black line or on blank ground.
-bool sensors_color_marker_present(void);
+// of them is bright enough.
+// @return false on a black line or on blank ground.
+bool sensors_is_color_marker_present(void);
 
-// Ultrasonic distance in cm (timeout returns the maximum sensor range)
-float sensors_ultrasonic_distance_cm(void);
+// @return ultrasonic distance in cm (timeout returns the maximum sensor range)
+float sensors_get_ultrasonic_distance_cm(void);
 
-// Trash capacity 0-100% from the HC-SR04 distance (100 = full)
-uint8_t sensors_trash_level_percent(void);
+// @return trash capacity 0..100% from the HC-SR04 distance (100 = full)
+uint8_t sensors_get_trash_level_percent(void);
 
-// true when the hand IR sensor at the trash opening sees a hand (LOW)
-bool sensors_hand_detected(void);
+// @return true when the hand IR sensor at the trash opening sees a hand (LOW)
+bool sensors_is_hand_detected(void);
 
-// Battery level 0-100% from the voltage divider ADC
-uint8_t sensors_battery_percent(void);
+// Battery level from the voltage divider ADC
+// @return battery level 0..100
+uint8_t sensors_get_battery_percent(void);
 
 // Blocking buzzer beep
-void sensors_buzzer_beep(int ms);
+// @param ms beep duration in ms
+void sensors_beep(int ms);
 
 #endif // SRC_SENSORS_H

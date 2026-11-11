@@ -32,32 +32,32 @@
 
 static const char* TAG = "graph_fetch";
 
-static int s_version;
+static int s_header_version;
 
-static EventGroupHandle_t s_fetch_event_group;
+static EventGroupHandle_t s_fetch_events;
 
 bool graph_fetch_success(void) {
     // The group is created in graph_fetch_init() before any caller can run;
     // a NULL handle here means the boot fetch was never started.
-    if (s_fetch_event_group == NULL) {
+    if (s_fetch_events == NULL) {
         return false;
     }
     EventBits_t bits =
-        xEventGroupWaitBits(s_fetch_event_group, FETCH_SUCCESS_BIT | FETCH_ERROR_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(s_fetch_events, FETCH_SUCCESS_BIT | FETCH_ERROR_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
     return (bits & FETCH_SUCCESS_BIT) != 0;
 }
 
-static esp_err_t fetch_event_handler(esp_http_client_event_t* evt) {
+static esp_err_t http_event_handler(esp_http_client_event_t* evt) {
     // The server sends the matrix version as an HTTP header, not in the body
     if (evt->event_id == HTTP_EVENT_ON_HEADER) {
         if (strcasecmp(evt->header_key, "X-Graph-Version") == 0) {
-            s_version = atoi(evt->header_value);
+            s_header_version = atoi(evt->header_value);
         }
     }
     return ESP_OK;
 }
 
-static esp_err_t fetch_and_apply(void) {
+static esp_err_t fetch_graph(void) {
     nvs_handle_t nvs_handle;
     // Opening can fail (namespace not provisioned yet), so it must not jump to
     // the close label with an invalid handle.
@@ -92,7 +92,7 @@ static esp_err_t fetch_and_apply(void) {
     esp_http_client_config_t config = {
         .url = server_url,
         .timeout_ms = 5000,
-        .event_handler = fetch_event_handler,
+        .event_handler = http_event_handler,
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
         .crt_bundle_attach = esp_crt_bundle_attach,
 #endif
@@ -106,7 +106,7 @@ static esp_err_t fetch_and_apply(void) {
 
     esp_err_t err;
 
-    s_version = -1; // sentinel: no X-Graph-Version header seen yet
+    s_header_version = -1; // sentinel: no X-Graph-Version header seen yet
 
     // ESP_RETURN_ON_ERROR would skip esp_http_client_cleanup and leak the client
     err = esp_http_client_set_method(client, HTTP_METHOD_GET);
@@ -132,7 +132,7 @@ static esp_err_t fetch_and_apply(void) {
         return ESP_FAIL;
     }
 
-    int version = s_version;
+    int version = s_header_version;
     int64_t len = esp_http_client_get_content_length(client);
     int status = esp_http_client_get_status_code(client);
 
@@ -178,28 +178,28 @@ nvs_close_on_error:
 
 // Only ever called from graph_fetch_task(): the TLS handshake needs ~8 KB, so
 // this must not run on the caller's stack (see graph_fetch_start_task()).
-static bool graph_fetch_run(void) {
+static bool graph_fetch_once(void) {
     // Do not touch the socket before WiFi has an IP. Bound this wait so the
     // caller can settle status to ERROR when the AP never connects.
     if (!wifi_wait_connected(FETCH_WIFI_WAIT_MS)) {
         ESP_LOGE(TAG, "WiFi did not obtain an IP within %d ms; fetch failed", FETCH_WIFI_WAIT_MS);
 #ifdef ADAM_GRAPH_FALLBACK_DUMMY
         ESP_LOGW(TAG, "DEV: no WiFi, falling back to the dummy graph");
-        if (s_fetch_event_group != NULL && graph_update(dummy_graph, 1) == ESP_OK) {
-            xEventGroupSetBits(s_fetch_event_group, FETCH_SUCCESS_BIT);
+        if (s_fetch_events != NULL && graph_update(dummy_graph, 1) == ESP_OK) {
+            xEventGroupSetBits(s_fetch_events, FETCH_SUCCESS_BIT);
             return true;
         }
 #endif
-        if (s_fetch_event_group != NULL) {
-            xEventGroupSetBits(s_fetch_event_group, FETCH_ERROR_BIT);
+        if (s_fetch_events != NULL) {
+            xEventGroupSetBits(s_fetch_events, FETCH_ERROR_BIT);
         }
         return false;
     }
 
     for (int attempt = 1; attempt <= FETCH_RETRY_COUNT; attempt++) {
-        if (fetch_and_apply() == ESP_OK) {
-            if (s_fetch_event_group != NULL) {
-                xEventGroupSetBits(s_fetch_event_group, FETCH_SUCCESS_BIT);
+        if (fetch_graph() == ESP_OK) {
+            if (s_fetch_events != NULL) {
+                xEventGroupSetBits(s_fetch_events, FETCH_SUCCESS_BIT);
             }
             return true;
         }
@@ -212,15 +212,15 @@ static bool graph_fetch_run(void) {
 #ifdef ADAM_GRAPH_FALLBACK_DUMMY
     if (graph_update(dummy_graph, 1) == ESP_OK) {
         ESP_LOGW(TAG, "DEV: fetch failed, installed dummy graph v1");
-        if (s_fetch_event_group != NULL) {
-            xEventGroupSetBits(s_fetch_event_group, FETCH_SUCCESS_BIT);
+        if (s_fetch_events != NULL) {
+            xEventGroupSetBits(s_fetch_events, FETCH_SUCCESS_BIT);
         }
         return true;
     }
 #endif
     // graph_version stays 0, no retry until admin reset or reboot (spec 06.4, 07.3.2)
-    if (s_fetch_event_group != NULL) {
-        xEventGroupSetBits(s_fetch_event_group, FETCH_ERROR_BIT);
+    if (s_fetch_events != NULL) {
+        xEventGroupSetBits(s_fetch_events, FETCH_ERROR_BIT);
     }
     return false;
 }
@@ -228,7 +228,7 @@ static bool graph_fetch_run(void) {
 // Task Fetch: low priority (1), core 0 (spec 07.1). Runs once at boot and
 // then deletes itself, so no idle task is left behind.
 static void graph_fetch_task(void* pvParameters) {
-    graph_fetch_run();
+    graph_fetch_once();
 
     // One-shot: fetch settled (success or out of retries), release the stack
     vTaskDelete(NULL);
@@ -240,16 +240,16 @@ static void graph_fetch_task(void* pvParameters) {
 // the executor and MQTT already query the fetch state before this task gets
 // its first slice of CPU.
 static esp_err_t graph_fetch_start_task(void) {
-    if (s_fetch_event_group == NULL) {
-        s_fetch_event_group = xEventGroupCreate();
-        if (s_fetch_event_group == NULL) {
+    if (s_fetch_events == NULL) {
+        s_fetch_events = xEventGroupCreate();
+        if (s_fetch_events == NULL) {
             return ESP_ERR_NO_MEM;
         }
     }
 
     // Cleared before the task starts, so graph_fetch_success() waiting for the
     // next result can never read the outcome of the previous fetch.
-    xEventGroupClearBits(s_fetch_event_group, FETCH_SUCCESS_BIT | FETCH_ERROR_BIT);
+    xEventGroupClearBits(s_fetch_events, FETCH_SUCCESS_BIT | FETCH_ERROR_BIT);
 
     if (xTaskCreatePinnedToCore(graph_fetch_task, "Task Fetch", 8192, NULL, 1, NULL, 0) != pdPASS) {
         return ESP_ERR_NO_MEM;
