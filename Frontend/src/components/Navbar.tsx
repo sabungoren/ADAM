@@ -1,407 +1,230 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useTheme } from '../context/ThemeContext';
-import { useLanguage } from '../context/LanguageContext';
+import React, { useState } from 'react';
+import { useTelemetry } from '../context/TelemetryContext';
 import { useAuth } from '../context/AuthContext';
-import { useRouter } from '../context/RouterContext';
-import { useAlert } from '../context/AlertContext';
-import {
-  LayoutDashboard,
-  Network,
-  History,
-  Sun,
-  Moon,
-  Globe,
-  LogIn,
-  LogOut,
-  Shield,
-  User,
+import { 
+  Compass, 
+  PenTool, 
+  ShieldCheck, 
+  Wifi, 
+  WifiOff, 
+  Battery, 
+  BatteryWarning, 
+  Navigation,
   Menu,
   X,
-  UserPlus,
-  Wifi,
+  Lock
 } from 'lucide-react';
-import { FleetConnectionModal } from './FleetConnectionModal';
-import './Navbar.css';
 
 interface NavbarProps {
-  isOnline: boolean;
+  currentTab: string;
+  onSelectTab: (tab: string) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ isOnline }) => {
-  const { isDark, toggleTheme } = useTheme();
-  const { lang, toggleLanguage, t } = useLanguage();
-  const { user, role, isAuthenticated, logout } = useAuth();
-  const { currentPath, navigate } = useRouter();
-  const { toast } = useAlert();
+export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
+  const { telemetry } = useTelemetry();
+  const { isAdmin } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Mobile menu toggle state & element refs
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isFleetModalOpen, setIsFleetModalOpen] = useState(false);
-  const menuDropdownRef = useRef<HTMLDivElement>(null);
-  const hamburgerBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Automatically close mobile menu when clicking or tapping outside of menuDropdownRef
-  useEffect(() => {
-    if (!isMobileMenuOpen) return;
-
-    const handleOutsideInteraction = (event: MouseEvent | TouchEvent | PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-
-      // If click/touch is inside the mobile dropdown list area, do not close
-      if (menuDropdownRef.current && menuDropdownRef.current.contains(target)) {
-        return;
-      }
-
-      // If click/touch is on the hamburger button itself, let the button's toggle handler manage it
-      if (hamburgerBtnRef.current && hamburgerBtnRef.current.contains(target)) {
-        return;
-      }
-
-      // Any click/touch outside the navbar list area automatically closes the mobile menu
-      setIsMobileMenuOpen(false);
-    };
-
-    // Use capture phase on pointerdown for immediate, zero-delay touch/mouse responsiveness
-    document.addEventListener('pointerdown', handleOutsideInteraction, { capture: true });
-    document.addEventListener('touchstart', handleOutsideInteraction, { capture: true, passive: true });
-
-    // Keyboard support: Escape closes the menu
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsMobileMenuOpen(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-
-    // If window is resized to desktop width, close the mobile menu
-    const handleResize = () => {
-      if (window.innerWidth > 768) {
-        setIsMobileMenuOpen(false);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      document.removeEventListener('pointerdown', handleOutsideInteraction, { capture: true });
-      document.removeEventListener('touchstart', handleOutsideInteraction, { capture: true });
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [isMobileMenuOpen]);
-
-  // Normalize active route helper
-  const isDashboardActive = currentPath === '/' || currentPath === '/dashboard';
-  const isEditorActive = currentPath === '/editor';
-  const isLogsActive = currentPath === '/logs';
-  const isAuthActive =
-    currentPath === '/login' ||
-    currentPath === '/register' ||
-    currentPath === '/verify-otp' ||
-    currentPath === '/forgot-password';
-
-  const handleEditorClick = () => {
-    setIsMobileMenuOpen(false);
-    if (role !== 'admin') {
-      toast.warning(
-        'Akses Terbatas: Graph Editor memerlukan Role ADMIN. Silakan masuk sebagai akun Admin.'
-      );
+  // Dynamic battery icon and styling
+  const getBatteryStyle = () => {
+    if (telemetry.battery <= 20) {
+      return {
+        icon: <BatteryWarning className="w-4 h-4 text-rose-400 animate-pulse" />,
+        badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+      };
     }
-    navigate('/editor');
+    if (telemetry.battery <= 50) {
+      return {
+        icon: <Battery className="w-4 h-4 text-amber-400" />,
+        badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+      };
+    }
+    return {
+      icon: <Battery className="w-4 h-4 text-emerald-400" />,
+      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+    };
   };
 
-  const handleNavClick = (path: string) => {
-    setIsMobileMenuOpen(false);
-    navigate(path);
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    toast.info('Anda telah keluar dari akun.');
-    setIsMobileMenuOpen(false);
-    navigate('/dashboard');
+  const handleSelectTab = (tab: string) => {
+    onSelectTab(tab);
+    setMobileMenuOpen(false);
   };
 
   return (
-    <header className="navbar-container">
-      <div className="navbar-inner">
-        {/* Brand & Subtitle */}
-        <div
-          className="navbar-brand"
-          onClick={() => handleNavClick('/dashboard')}
-          style={{ cursor: 'pointer' }}
-          id="navbar-brand-logo"
-        >
-          <div className="brand-icon-box">
-            <img
-              src="/adam_logo.svg"
-              alt="ADAM Logo"
-              className="brand-logo-img"
-              width="28"
-              height="28"
-              style={{ borderRadius: '6px', objectFit: 'contain' }}
-              onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = 'none';
-              }}
-            />
-          </div>
-          <div className="brand-text">
-            <div className="brand-title-row">
-              <span className="brand-title">{t('brandTitle')}</span>
-              <span className="group-badge">{t('groupLabel')}</span>
-            </div>
-            <span className="brand-subtitle">{t('brandSubtitle')}</span>
-          </div>
-        </div>
-
-        {/* Desktop Navigation Tabs */}
-        <nav className="navbar-links desktop-only" aria-label="Main Navigation">
-          <button
-            className={`nav-tab-btn ${isDashboardActive ? 'active' : ''}`}
-            onClick={() => handleNavClick('/dashboard')}
-            id="nav-tab-dashboard"
+    <header className="sticky top-0 z-40 bg-dark-900 border-b border-dark-800">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16">
+          {/* Ujung Kiri: Logo & Nama Project */}
+          <div 
+            className="flex items-center space-x-2 sm:space-x-2.5 cursor-pointer select-none"
+            onClick={() => handleSelectTab('home')}
           >
-            <LayoutDashboard size={18} />
-            <span>{t('navDashboard')}</span>
-          </button>
+            <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+              <Navigation className="w-4 h-4" />
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="hidden sm:inline font-extrabold text-sm sm:text-base tracking-wide text-white">Project A.D.A.M</span>
+            </div>
+          </div>
 
-          {role === 'admin' && (
+          {/* Navigasi Desktop (Tengah) */}
+          <nav className="hidden md:flex items-center space-x-1 bg-dark-950 p-1 rounded-xl border border-dark-800">
             <button
-              className={`nav-tab-btn ${isEditorActive ? 'active' : ''}`}
-              onClick={handleEditorClick}
-              id="nav-tab-editor"
-              title="Editor Peta Lintasan"
+              onClick={() => handleSelectTab('home')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                currentTab === 'home'
+                  ? 'bg-cyan-500 text-dark-950 shadow-sm font-bold'
+                  : 'text-gray-300 hover:text-white hover:bg-dark-800'
+              }`}
             >
-              <Network size={18} />
-              <span>{t('navGraphEditor')}</span>
+              <Compass className="w-4 h-4" />
+              <span>Peta & Panggilan</span>
             </button>
-          )}
 
-          <button
-            className={`nav-tab-btn ${isLogsActive ? 'active' : ''}`}
-            onClick={() => handleNavClick('/logs')}
-            id="nav-tab-logs"
-          >
-            <History size={18} />
-            <span>{t('navLogs')}</span>
-          </button>
-        </nav>
-
-        {/* Desktop Controls & Auth */}
-        <div className="navbar-controls desktop-only">
-          {isAuthenticated ? (
-            <div className="navbar-user-section">
-              <div
-                className={`user-badge ${role === 'admin' ? 'admin' : 'user'}`}
-                title={`Profil: ${user?.name} (${role.toUpperCase()})`}
-              >
-                {role === 'admin' ? <Shield size={14} /> : <User size={14} />}
-                <span className="user-name">{user?.name || user?.email?.split('@')[0]}</span>
-                <span className="role-tag">{role === 'admin' ? t('roleAdmin') : t('roleUser')}</span>
-              </div>
-              <button
-                className="control-icon-btn logout-btn"
-                onClick={handleLogout}
-                title={t('navLogout')}
-                aria-label="Logout"
-                id="navbar-logout-btn"
-              >
-                <LogOut size={16} />
-              </button>
-            </div>
-          ) : (
-            <div className="navbar-guest-actions">
-              <button
-                className={`nav-auth-btn ${isAuthActive ? 'active' : ''}`}
-                onClick={() => handleNavClick('/login')}
-                id="navbar-login-btn"
-              >
-                <LogIn size={15} />
-                <span>Masuk</span>
-              </button>
-              <button
-                className="nav-register-btn"
-                onClick={() => handleNavClick('/register')}
-                id="navbar-register-btn"
-              >
-                <UserPlus size={15} />
-                <span>Daftar</span>
-              </button>
-            </div>
-          )}
-
-          {/* Connection status badge (Hanya tampil jika user sudah login) */}
-          {isAuthenticated && (
-            <div
-              className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
-              onClick={() => setIsFleetModalOpen(true)}
-              title={t('fleetTooltipNavbar')}
-              id="navbar-fleet-status-badge"
+            <button
+              onClick={() => {
+                if (!isAdmin) {
+                  handleSelectTab('admin');
+                } else {
+                  handleSelectTab('editor');
+                }
+              }}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                currentTab === 'editor'
+                  ? 'bg-cyan-500 text-dark-950 shadow-sm font-bold'
+                  : 'text-gray-300 hover:text-white hover:bg-dark-800'
+              }`}
+              title={!isAdmin ? 'Akses Khusus Administrator (Perlu Login)' : 'Graph Editor'}
             >
-              <Wifi size={13} className="conn-icon" />
-              <span>{isOnline ? t('fleetBadgeOnline') : t('statusOffline')}</span>
+              <PenTool className="w-4 h-4" />
+              <span>Graph Editor</span>
+              {!isAdmin && <Lock className="w-3 h-3 text-amber-400" />}
+            </button>
+
+            <button
+              onClick={() => handleSelectTab('admin')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                currentTab === 'admin'
+                  ? 'bg-cyan-500 text-dark-950 shadow-sm font-bold'
+                  : 'text-gray-300 hover:text-white hover:bg-dark-800'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </button>
+          </nav>
+
+          {/* Sisi Kanan: Icon WiFi, Icon Baterai, dan Hamburger Menu */}
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
+            {/* 1. Icon WiFi (Online / Stale / Offline) */}
+            <div
+              className={`flex items-center justify-center w-8 h-8 sm:w-auto sm:px-2.5 sm:py-1 rounded-lg text-xs border ${
+                telemetry.online && telemetry.fresh
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : telemetry.online
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+              }`}
+              title={
+                telemetry.online && telemetry.fresh
+                  ? 'Armada Online'
+                  : telemetry.online
+                  ? 'Sinyal Stale (>30s)'
+                  : 'Armada Offline'
+              }
+            >
+              {telemetry.online && telemetry.fresh ? (
+                <Wifi className="w-4 h-4" />
+              ) : (
+                <WifiOff className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline font-bold ml-1.5">
+                {telemetry.online && telemetry.fresh ? 'Online' : telemetry.online ? 'Stale' : 'Offline'}
+              </span>
             </div>
-          )}
 
-          {/* Theme Toggle */}
-          <button
-            className="control-icon-btn"
-            onClick={toggleTheme}
-            title={isDark ? t('themeLight') : t('themeDark')}
-            aria-label="Toggle Theme"
-            id="theme-toggle-btn"
-          >
-            {isDark ? <Sun size={18} className="theme-icon sun" /> : <Moon size={18} className="theme-icon moon" />}
-          </button>
+            {/* 2. Icon Baterai Dinamis */}
+            {(() => {
+              const bStyle = getBatteryStyle();
+              return (
+                <div 
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-xs border font-mono font-bold transition-colors ${bStyle.badge}`}
+                  title={`Daya Baterai Robot: ${telemetry.battery}%`}
+                >
+                  {bStyle.icon}
+                  <span>{telemetry.battery}%</span>
+                </div>
+              );
+            })()}
 
-          {/* Language Toggle */}
-          <button
-            className="lang-pill-btn"
-            onClick={toggleLanguage}
-            title={t('languageToggle')}
-            aria-label="Switch Language"
-            id="lang-toggle-btn"
-          >
-            <Globe size={15} />
-            <span className="lang-code">{lang.toUpperCase()}</span>
-          </button>
-        </div>
-
-        {/* Mobile Header Right Controls: Theme Toggle & Hamburger */}
-        <div className="mobile-header-actions mobile-only">
-          <button
-            className="control-icon-btn"
-            onClick={toggleTheme}
-            title={isDark ? t('themeLight') : t('themeDark')}
-            aria-label="Toggle Theme"
-          >
-            {isDark ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
-
-          <button
-            ref={hamburgerBtnRef}
-            className={`hamburger-btn ${isMobileMenuOpen ? 'open' : ''}`}
-            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-            aria-label="Toggle Navigation Menu"
-            id="mobile-menu-toggle-btn"
-          >
-            {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
+            {/* 3. Hamburger Menu Button (Ujung Kanan di Mobile) */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="w-8 h-8 rounded-lg bg-dark-950 text-gray-200 border border-dark-800 flex items-center justify-center hover:text-white hover:border-gray-700 transition"
+                aria-label="Toggle Menu"
+              >
+                {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ===================================================================
-          STANDARD MOBILE HAMBURGER DROPDOWN (Bebas Scrollbar, Rapi Seperti Website Umum)
-          =================================================================== */}
-      {isMobileMenuOpen && (
-        <>
-          {/* Full viewport backdrop click catcher */}
-          <div
-            className="mobile-menu-backdrop"
-            onClick={() => setIsMobileMenuOpen(false)}
-            onTouchEnd={() => setIsMobileMenuOpen(false)}
-            aria-label="Tutup Menu"
-          />
-
-          {/* Actual Dropdown Navigation List Area */}
-          <div
-            ref={menuDropdownRef}
-            className="mobile-menu-dropdown"
-            id="mobile-nav-dropdown-area"
+      {/* Dropdown Mobile Navigation Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-dark-900 border-b border-dark-800 px-4 py-3 space-y-2 animate-fadeIn">
+          <button
+            onClick={() => handleSelectTab('home')}
+            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
+              currentTab === 'home'
+                ? 'bg-cyan-500 text-dark-950 shadow-sm'
+                : 'text-gray-300 bg-dark-950 hover:bg-dark-800'
+            }`}
           >
-            <nav className="mobile-nav-list">
-              <button
-                className={`mobile-nav-item ${isDashboardActive ? 'active' : ''}`}
-                onClick={() => handleNavClick('/dashboard')}
-              >
-                <LayoutDashboard size={19} />
-                <span>{t('navDashboard')}</span>
-              </button>
+            <Compass className="w-4 h-4 flex-shrink-0" />
+            <span>Peta & Panggilan Armada</span>
+          </button>
 
-              {role === 'admin' && (
-                <button
-                  className={`mobile-nav-item ${isEditorActive ? 'active' : ''}`}
-                  onClick={handleEditorClick}
-                >
-                  <Network size={19} />
-                  <span>{t('navGraphEditor')}</span>
-                </button>
-              )}
-
-              <button
-                className={`mobile-nav-item ${isLogsActive ? 'active' : ''}`}
-                onClick={() => handleNavClick('/logs')}
-              >
-                <History size={19} />
-                <span>{t('navLogs')}</span>
-              </button>
-            </nav>
-
-            {/* Mobile Auth / Profile Item */}
-            <div className="mobile-user-section">
-              {isAuthenticated ? (
-                <div className="mobile-logged-user">
-                  <div className={`user-badge ${role === 'admin' ? 'admin' : 'user'} full-width`}>
-                    {role === 'admin' ? <Shield size={16} /> : <User size={16} />}
-                    <span className="user-name">{user?.name || user?.email}</span>
-                    <span className="role-tag">{role === 'admin' ? t('roleAdmin') : t('roleUser')}</span>
-                  </div>
-                  <button className="mobile-logout-btn" onClick={handleLogout}>
-                    <LogOut size={16} />
-                    <span>{t('navLogout')}</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="mobile-guest-buttons">
-                  <button
-                    className="mobile-login-btn"
-                    onClick={() => handleNavClick('/login')}
-                  >
-                    <LogIn size={18} />
-                    <span>Masuk ke Akun</span>
-                  </button>
-                  <button
-                    className="mobile-register-btn"
-                    onClick={() => handleNavClick('/register')}
-                  >
-                    <UserPlus size={18} />
-                    <span>Daftar Akun Baru</span>
-                  </button>
-                </div>
-              )}
+          <button
+            onClick={() => {
+              if (!isAdmin) {
+                handleSelectTab('admin');
+              } else {
+                handleSelectTab('editor');
+              }
+            }}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
+              currentTab === 'editor'
+                ? 'bg-cyan-500 text-dark-950 shadow-sm'
+                : 'text-gray-300 bg-dark-950 hover:bg-dark-800'
+            }`}
+          >
+            <div className="flex items-center space-x-3">
+              <PenTool className="w-4 h-4 flex-shrink-0" />
+              <span>Graph Editor (Desain Peta)</span>
             </div>
+            {!isAdmin && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                <Lock className="w-3 h-3" />
+                <span>Admin</span>
+              </span>
+            )}
+          </button>
 
-            {/* Mobile Status & Lang Footer */}
-            <div className="mobile-dropdown-footer">
-              {isAuthenticated && (
-                <div
-                  className={`connection-badge ${isOnline ? 'online' : 'offline'} cursor-pointer`}
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    setIsFleetModalOpen(true);
-                  }}
-                  id="mobile-fleet-status-badge"
-                >
-                  <Wifi size={14} className="conn-icon" />
-                  <span>{isOnline ? t('fleetBadgeOnline') : t('statusOffline')}</span>
-                </div>
-              )}
-
-              <button className="lang-pill-btn" onClick={toggleLanguage}>
-                <Globe size={16} />
-                <span>{lang === 'id' ? 'Bahasa Indonesia' : 'English (US)'}</span>
-              </button>
-            </div>
-          </div>
-        </>
+          <button
+            onClick={() => handleSelectTab('admin')}
+            className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
+              currentTab === 'admin'
+                ? 'bg-cyan-500 text-dark-950 shadow-sm'
+                : 'text-gray-300 bg-dark-950 hover:bg-dark-800'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+            <span>Dashboard Admin</span>
+          </button>
+        </div>
       )}
-
-      {/* Fleet Wi-Fi & MQTT Armada Connection Modal */}
-      <FleetConnectionModal
-        isOpen={isFleetModalOpen}
-        onClose={() => setIsFleetModalOpen(false)}
-      />
     </header>
   );
 };
-export default Navbar;
