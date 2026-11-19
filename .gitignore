@@ -1,15 +1,23 @@
+# ==============================================================================
+# Project A.D.A.M - Git Ignore Configuration
+# ==============================================================================
+
 # Dependencies
 node_modules/
 **/node_modules/
+.pnp
+.pnp.js
 
-# Production builds
+# Production builds & artifacts
 dist/
 **/dist/
 dist-ssr/
 **/dist-ssr/
+build/
+**/build/
 *.local
 
-# Environment variables & secrets (CRITICAL: Do NOT commit credentials to GitHub)
+# Environment variables & secrets (Wajib diabaikan agar tidak bocor ke publik)
 .env
 .env.*
 !.env.example
@@ -17,7 +25,7 @@ dist-ssr/
 **/.env.*
 !**/.env.example
 
-# Logs
+# Logs & debugging
 *.log
 logs/
 **/logs/
@@ -26,10 +34,23 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Editor & OS files
+# Database & SQLite temporary files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backend/data/*.db
+backend/data/*.db-*
+**/data/*.db
+**/data/*.db-*
+
+# OS & Editor files
 .DS_Store
 Thumbs.db
+desktop.ini
 .vscode/*
+!.vscode/settings.json
 !.vscode/extensions.json
 .idea/
 *.suo
@@ -38,3 +59,14 @@ Thumbs.db
 *.sln
 *.sw?
 
+# Windows executables & backup files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+backend/adam-gateway*
+cloudflared*
+ecosystem.config.js
+nginx.conf*
+ram-watchdog*
