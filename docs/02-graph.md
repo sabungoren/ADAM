@@ -91,5 +91,5 @@ Node adalah titik pada lintasan, **bukan hanya persimpangan**. Untuk mengenali t
 | 4 | perempatan | `0b111` |
 
 * **Fallback** bila sensor warna mati/tidak tersedia: node dianggap tiba saat pola cabang — sensor tengah **dan minimal satu sisi** — bertahan `NODE_BRANCH_RUNS` (default 3) siklus kontrol berturut-turut. Fallback ini hanya berlaku untuk node dengan cabang samping (belok/pertigaan/perempatan); node lurus dan ujung garis tetap memerlukan marker.
-* Deteksi node yang tervalidasi akan memicu event `NODE_ARRIVED` pada *Task Executor* untuk mengeksekusi logika belokan/pemberhentian.
+* Deteksi node yang tervalidasi memicu logika belokan/pemberhentian pada *Task Executor*.
 * Setelah satu node terdeteksi, marker harus hilang dari pandangan sensor (dan pola cabang hilang pada jalur fallback) sebelum node berikutnya boleh dilaporkan, agar satu node tidak terdeteksi dua kali.

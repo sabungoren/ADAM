@@ -1,4 +1,3 @@
-
 Import("env")
 
 import subprocess
@@ -10,8 +9,8 @@ PROJECT_DIR = env.subst("$PROJECT_DIR")
 MERGED_BIN = Path(BUILD_DIR) / "firmware.merged.bin"
 NVS_BIN = Path(BUILD_DIR) / "nvs_data.bin"
 
-# nvs-gen.py (loaded as a pre script) exports the CSV it generates from.
-CSV_FILE = env.get("CSV_FILE", str(Path(PROJECT_DIR) / "nvs_data.csv"))
+# Same CSV that scripts/nvs-gen.py generates the image from.
+CSV_FILE = Path(PROJECT_DIR) / "nvs_data.csv"
 
 
 def get_nvs_offset():
@@ -32,7 +31,7 @@ def get_nvs_offset():
             row = [item.strip() for item in row]
 
             if len(row) >= 5:
-                name, ptype, subtype, offset, size = row[:5]
+                name, ptype, subtype, offset = row[:4]
 
                 if name == "nvs" and ptype == "data" and subtype == "nvs":
                     if not offset:
